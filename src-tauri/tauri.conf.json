@@ -45,10 +45,12 @@
       "shortDescription": "Keyboard & Mouse Heatmap Tracker",
       "longDescription": "A cross-platform keyboard and mouse heatmap desktop application for programmers and gamers.",
       "deb": {
-        "depends": []
+        "depends": [],
+        "files": {}
       },
       "rpm": {
-        "depends": []
+        "depends": [],
+        "release": "1"
       }
     },
     "security": {
@@ -56,7 +58,7 @@
     },
     "systemTray": {
       "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
+      "iconAsTemplate": false
     },
     "windows": [
       {

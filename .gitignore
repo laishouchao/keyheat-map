@@ -21,7 +21,6 @@ Thumbs.db
 .env.local
 
 # Tauri
-src-tauri/icons/icon.icns
 src-tauri/WixTools/
 
 # Database
