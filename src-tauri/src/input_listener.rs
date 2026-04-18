@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use crate::db::Database;
+use tauri::Manager;
 
 /// 输入事件类型
 #[derive(Debug, Clone)]
@@ -65,7 +66,7 @@ impl InputListener {
     }
 
     /// 启动输入监听
-    pub fn start(&mut self, db: Arc<Database>) -> Result<(), String> {
+    pub fn start(&mut self, db: Arc<Database>, app_handle: tauri::AppHandle) -> Result<(), String> {
         if self.is_listening.load(Ordering::SeqCst) {
             return Ok(());
         }
@@ -94,6 +95,7 @@ impl InputListener {
         // 启动事件处理线程
         let db_clone = Arc::clone(&db);
         let processor_listening = Arc::clone(&self.is_listening);
+        let app_handle_clone = app_handle.clone();
         let processor_thread = thread::Builder::new()
             .name("input-processor".to_string())
             .spawn(move || {
@@ -106,7 +108,7 @@ impl InputListener {
                     if !processor_listening.load(Ordering::SeqCst) {
                         // 处理剩余事件
                         while let Ok(event) = rx.try_recv() {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position) {
+                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position, &app_handle_clone) {
                                 eprintln!("处理事件失败: {}", e);
                             }
                         }
@@ -115,7 +117,7 @@ impl InputListener {
 
                     match rx.recv_timeout(std::time::Duration::from_millis(100)) {
                         Ok(event) => {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position) {
+                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position, &app_handle_clone) {
                                 eprintln!("处理事件失败: {}", e);
                             }
                         }
@@ -146,7 +148,7 @@ impl InputListener {
                     // 鼠标位置需要从 EventType::MouseMove 中获取
                     match event.event_type {
                         rdev::EventType::KeyPress(key) => {
-                            let key_name = format!("{:?}", key);
+                            let key_name = normalize_key_name(&key);
                             let key_code = key_to_code(&key);
                             let timestamp = chrono::Local::now().to_rfc3339();
 
@@ -164,9 +166,9 @@ impl InputListener {
                                 let combo_name = {
                                     if let Ok(mods) = modifiers_arc.lock() {
                                         if !mods.is_empty() {
-                                            // 按固定顺序排列修饰键：Ctrl, Shift, Alt, AltGr, Meta
+                                            // 按固定顺序排列修饰键：Ctrl, Shift, Alt, AltGr
                                             let mut sorted_mods = mods.clone();
-                                            let order = ["Ctrl", "Shift", "Alt", "AltGr", "Meta"];
+                                            let order = ["Ctrl", "Shift", "Alt", "AltGr"];
                                             sorted_mods.sort_by_key(|m| {
                                                 order.iter().position(|&o| o == *m).unwrap_or(999)
                                             });
@@ -257,6 +259,7 @@ impl InputListener {
         mouse_move_count: &mut u64,
         mouse_position_sample_rate: u64,
         last_mouse_position: &mut Option<(i32, i32)>,
+        app_handle: &tauri::AppHandle,
     ) -> Result<(), String> {
         let sid = session_id.lock().map_err(|e| e.to_string())?;
         let session_id_str = sid.clone();
@@ -269,13 +272,17 @@ impl InputListener {
                 timestamp,
             } => {
                 db.insert_key_event(key_name, *key_code, timestamp, &session_id_str)?;
+                // 推送事件通知前端刷新
+                let _ = app_handle.emit_all("input-event", "key_press");
             }
             InputEvent::ComboKeyPress { combo_name, timestamp } => {
                 db.insert_combo_event(combo_name, timestamp, &session_id_str)?;
+                let _ = app_handle.emit_all("input-event", "combo_key_press");
             }
             InputEvent::MouseClick { x, y, timestamp } => {
                 db.insert_mouse_event("click", *x, *y, timestamp, &session_id_str)?;
                 db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
+                let _ = app_handle.emit_all("input-event", "mouse_click");
             }
             InputEvent::MouseMove {
                 x,
@@ -306,10 +313,16 @@ impl InputListener {
                 if *mouse_move_count % mouse_position_sample_rate == 0 {
                     db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
                 }
+
+                // MouseMove 事件太频繁，每 10 次才推送一次
+                if *mouse_move_count % 10 == 0 {
+                    let _ = app_handle.emit_all("input-event", "mouse_move");
+                }
             }
             InputEvent::MouseScroll { x, y, timestamp } => {
                 db.insert_mouse_event("scroll", *x, *y, timestamp, &session_id_str)?;
                 db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
+                let _ = app_handle.emit_all("input-event", "mouse_scroll");
             }
         }
 
@@ -355,6 +368,29 @@ impl InputListener {
     pub fn get_session_id(&self) -> Result<String, String> {
         let sid = self.session_id.lock().map_err(|e| e.to_string())?;
         Ok(sid.clone())
+    }
+}
+
+/// 将 rdev 的 key 名称统一映射为标准格式
+fn normalize_key_name(key: &rdev::Key) -> String {
+    let raw = format!("{:?}", key);
+    match raw.as_str() {
+        "Num0" => "Digit0".to_string(),
+        "Num1" => "Digit1".to_string(),
+        "Num2" => "Digit2".to_string(),
+        "Num3" => "Digit3".to_string(),
+        "Num4" => "Digit4".to_string(),
+        "Num5" => "Digit5".to_string(),
+        "Num6" => "Digit6".to_string(),
+        "Num7" => "Digit7".to_string(),
+        "Num8" => "Digit8".to_string(),
+        "Num9" => "Digit9".to_string(),
+        "Return" => "Enter".to_string(),
+        "Alt" => "AltLeft".to_string(),
+        "AltGr" => "AltRight".to_string(),
+        "BackQuote" => "Backquote".to_string(),
+        "BackSlash" => "Backslash".to_string(),
+        _ => raw,
     }
 }
 
@@ -439,13 +475,13 @@ fn key_to_code(key: &rdev::Key) -> Option<i32> {
     Some(code)
 }
 
-/// 判断是否是修饰键
+/// 判断是否是修饰键（排除 Meta 键，因为 Win 键的 release 不可靠）
 fn is_modifier_key(key: &rdev::Key) -> bool {
     matches!(key,
         rdev::Key::ShiftLeft | rdev::Key::ShiftRight |
         rdev::Key::ControlLeft | rdev::Key::ControlRight |
-        rdev::Key::Alt | rdev::Key::AltGr |
-        rdev::Key::MetaLeft | rdev::Key::MetaRight
+        rdev::Key::Alt | rdev::Key::AltGr
+        // 注意：不包含 MetaLeft / MetaRight，避免 Win 键卡住
     )
 }
 
@@ -456,14 +492,13 @@ fn get_modifier_label(key: &rdev::Key) -> &'static str {
         rdev::Key::ControlLeft | rdev::Key::ControlRight => "Ctrl",
         rdev::Key::Alt => "Alt",
         rdev::Key::AltGr => "AltGr",
-        rdev::Key::MetaLeft | rdev::Key::MetaRight => "Meta",
         _ => "",
     }
 }
 
 /// 获取按键的显示标签
 fn get_key_label(key: &rdev::Key) -> String {
-    let name = format!("{:?}", key);
-    // 清理名称：移除 "Key" 和 "Num" 前缀
-    name.replace("Key", "").replace("Num", "")
+    let name = normalize_key_name(key);
+    // 清理名称：移除 "Key" 和 "Digit" 前缀
+    name.replace("Key", "").replace("Digit", "")
 }

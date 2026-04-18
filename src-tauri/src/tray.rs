@@ -76,7 +76,7 @@ fn toggle_recording_from_tray(app: &AppHandle) {
             }
         } else {
             if let Ok(mut listener) = state.listener.lock() {
-                let _ = listener.start(std::sync::Arc::clone(&state.db));
+                let _ = listener.start(std::sync::Arc::clone(&state.db), app.clone());
             }
         }
 

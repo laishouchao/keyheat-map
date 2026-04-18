@@ -101,7 +101,7 @@ fn main() {
             if auto_start_recording {
                 let state = app.state::<AppState>();
                 let mut listener = state.listener.lock().expect("获取监听器锁失败");
-                if let Err(e) = listener.start(Arc::clone(&state.db)) {
+                if let Err(e) = listener.start(Arc::clone(&state.db), app.handle().clone()) {
                     eprintln!("启动输入监听失败: {}", e);
                 }
             }

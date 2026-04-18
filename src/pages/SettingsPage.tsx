@@ -5,6 +5,7 @@ import {
   Palette, Keyboard, ExternalLink, Copy,
 } from 'lucide-react';
 import { ColorScheme } from '../utils/colorUtils';
+import { keyLayouts } from '../utils/keyLayout';
 
 // 后端返回的类型
 interface AppSettings {
@@ -422,9 +423,9 @@ export default function SettingsPage() {
             onChange={(e) => updateSetting('keyboard_layout', e.target.value)}
             style={{ width: 120 }}
           >
-            <option value="60%">60%</option>
-            <option value="75%">75%</option>
-            <option value="full">全尺寸</option>
+            {Object.entries(keyLayouts).map(([key, val]) => (
+              <option key={key} value={key}>{val.name}</option>
+            ))}
           </select>
         </SettingRow>
       </SettingSection>

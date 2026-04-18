@@ -6,7 +6,7 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { keyLayout60, KEYBOARD_WIDTH, KEYBOARD_HEIGHT } from '../utils/keyLayout';
+import { keyLayouts } from '../utils/keyLayout';
 import { getHeatColor, getContrastTextColor } from '../utils/colorUtils';
 import { formatNumber, formatDistance, formatDuration, formatPercent } from '../utils/formatters';
 
@@ -131,22 +131,20 @@ function StatCard({
 // 将浏览器 KeyboardEvent 映射到 keyLayout 中的 key 标识
 function mapEventToKey(e: KeyboardEvent): string | null {
   const code = e.code;
-
-  // 直接匹配（大部分按键 code 和 rdev 格式一致）
-  if (code.startsWith('Key')) return code; // "KeyA" -> "KeyA"
-  if (code.startsWith('Digit')) return code.replace('Digit', 'Num'); // "Digit1" -> "Num1"
+  if (code.startsWith('Key')) return code;
+  if (code.startsWith('Digit')) return code;
   if (code === 'Space') return 'Space';
   if (code === 'ShiftLeft') return 'ShiftLeft';
   if (code === 'ShiftRight') return 'ShiftRight';
   if (code === 'ControlLeft') return 'ControlLeft';
   if (code === 'ControlRight') return 'ControlRight';
-  if (code === 'AltLeft') return 'Alt';
-  if (code === 'AltRight') return 'AltGr';
+  if (code === 'AltLeft') return 'AltLeft';
+  if (code === 'AltRight') return 'AltRight';
   if (code === 'MetaLeft') return 'MetaLeft';
   if (code === 'MetaRight') return 'MetaRight';
   if (code === 'CapsLock') return 'CapsLock';
   if (code === 'Tab') return 'Tab';
-  if (code === 'Enter') return 'Return';
+  if (code === 'Enter') return 'Enter';
   if (code === 'Backspace') return 'Backspace';
   if (code === 'Delete') return 'Delete';
   if (code === 'Insert') return 'Insert';
@@ -154,10 +152,10 @@ function mapEventToKey(e: KeyboardEvent): string | null {
   if (code === 'End') return 'End';
   if (code === 'PageUp') return 'PageUp';
   if (code === 'PageDown') return 'PageDown';
-  if (code === 'ArrowUp') return 'UpArrow';
-  if (code === 'ArrowDown') return 'DownArrow';
-  if (code === 'ArrowLeft') return 'LeftArrow';
-  if (code === 'ArrowRight') return 'RightArrow';
+  if (code === 'ArrowUp') return 'ArrowUp';
+  if (code === 'ArrowDown') return 'ArrowDown';
+  if (code === 'ArrowLeft') return 'ArrowLeft';
+  if (code === 'ArrowRight') return 'ArrowRight';
   if (code.startsWith('F') && code.length <= 3) {
     const num = parseInt(code.slice(1));
     if (num >= 1 && num <= 12) return `F${num}`;
@@ -167,14 +165,18 @@ function mapEventToKey(e: KeyboardEvent): string | null {
   if (code === 'BracketRight') return 'BracketRight';
   if (code === 'Semicolon') return 'Semicolon';
   if (code === 'Quote') return 'Quote';
-  if (code === 'Backquote') return 'BackQuote';
-  if (code === 'Backslash') return 'BackSlash';
+  if (code === 'Backquote') return 'Backquote';
+  if (code === 'Backslash') return 'Backslash';
   if (code === 'Slash') return 'Slash';
   if (code === 'Period') return 'Period';
   if (code === 'Comma') return 'Comma';
   if (code === 'Minus') return 'Minus';
   if (code === 'Equal') return 'Equal';
-
+  if (code === 'ContextMenu') return 'ContextMenu';
+  if (code === 'PrintScreen') return 'PrintScreen';
+  if (code === 'ScrollLock') return 'ScrollLock';
+  if (code === 'Pause') return 'Pause';
+  if (code.startsWith('Numpad')) return code;
   return null;
 }
 
@@ -185,7 +187,7 @@ function brightenColor(color: string): string {
 }
 
 // 键盘热力图
-function KeyboardHeatmap({ keyCounts, colorScheme = 'neon' }: { keyCounts: Record<string, number>; colorScheme?: string }) {
+function KeyboardHeatmap({ keyCounts, colorScheme = 'neon', layout = '60%' }: { keyCounts: Record<string, number>; colorScheme?: string; layout?: string }) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // 当前按下的键
   const maxCount = useMemo(
@@ -196,6 +198,11 @@ function KeyboardHeatmap({ keyCounts, colorScheme = 'neon' }: { keyCounts: Recor
     () => Object.values(keyCounts).reduce((a, b) => a + b, 0),
     [keyCounts]
   );
+
+  const layoutInfo = keyLayouts[layout] || keyLayouts['60%'];
+  const keys = layoutInfo.data;
+  const kbWidth = layoutInfo.width;
+  const kbHeight = layoutInfo.height;
 
   // 监听键盘事件实现实时高亮
   useEffect(() => {
@@ -241,18 +248,18 @@ function KeyboardHeatmap({ keyCounts, colorScheme = 'neon' }: { keyCounts: Recor
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600 }}>键盘热力图</h3>
         <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          60% 布局
+          {layoutInfo.name} 布局
         </span>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', overflow: 'auto' }}>
         <svg
-          width={KEYBOARD_WIDTH + 20}
-          height={KEYBOARD_HEIGHT + 20}
-          viewBox={`-10 -10 ${KEYBOARD_WIDTH + 20} ${KEYBOARD_HEIGHT + 20}`}
+          width={kbWidth + 20}
+          height={kbHeight + 20}
+          viewBox={`-10 -10 ${kbWidth + 20} ${kbHeight + 20}`}
           style={{ maxWidth: '100%' }}
         >
-          {keyLayout60.map((k) => {
+          {keys.map((k) => {
             const count = keyCounts[k.key] || 0;
             const color = getHeatColor(count, maxCount, colorScheme as any);
             const textColor = getContrastTextColor(color);
@@ -483,6 +490,7 @@ export default function Dashboard() {
   const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [colorScheme, setColorScheme] = useState('neon');
+  const [layout, setLayout] = useState('60%');
 
   // 加载设置
   useEffect(() => {
@@ -490,6 +498,9 @@ export default function Dashboard() {
       const settings = await invokeTauri<AppSettings>('get_app_settings');
       if (settings) {
         setColorScheme(settings.color_scheme || 'neon');
+        if (settings.keyboard_layout && keyLayouts[settings.keyboard_layout]) {
+          setLayout(settings.keyboard_layout);
+        }
       }
     };
     loadSettings();
@@ -506,7 +517,12 @@ export default function Dashboard() {
       if (s) setStats(s);
       if (h) setHeatmapData(h);
       if (hr) setHourlyData(hr);
-      if (settings) setColorScheme(settings.color_scheme || 'neon');
+      if (settings) {
+        setColorScheme(settings.color_scheme || 'neon');
+        if (settings.keyboard_layout && keyLayouts[settings.keyboard_layout]) {
+          setLayout(settings.keyboard_layout);
+        }
+      }
     } catch (e) {
       console.error('获取数据失败:', e);
     } finally {
@@ -516,8 +532,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const timer = setInterval(fetchData, 3000);
-    return () => clearInterval(timer);
+
+    let unlisten: (() => void) | null = null;
+    if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen<string>('input-event', () => {
+          fetchData();
+        }).then(fn => { unlisten = fn; }).catch(() => {});
+      }).catch(() => {});
+    }
+
+    const timer = setInterval(fetchData, 5000);
+    return () => {
+      clearInterval(timer);
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // 将后端 KeyCount[] 转换为 keyCounts Record（key_name -> count）
@@ -620,7 +649,7 @@ export default function Dashboard() {
       </div>
 
       {/* 键盘热力图 */}
-      <KeyboardHeatmap keyCounts={keyCounts} colorScheme={colorScheme} />
+      <KeyboardHeatmap keyCounts={keyCounts} colorScheme={colorScheme} layout={layout} />
 
       {/* 图表区域 */}
       <div className="grid-2" style={{ marginTop: 20 }}>

@@ -141,14 +141,14 @@ pub fn save_app_settings(
 
 /// 切换录制状态
 #[tauri::command]
-pub fn toggle_recording(state: tauri::State<AppState>) -> Result<bool, String> {
+pub fn toggle_recording(app_handle: tauri::AppHandle, state: tauri::State<AppState>) -> Result<bool, String> {
     let mut listener = state.listener.lock().map_err(|e| e.to_string())?;
 
     if listener.is_running() {
         listener.stop(&state.db)?;
         Ok(false)
     } else {
-        listener.start(std::sync::Arc::clone(&state.db))?;
+        listener.start(std::sync::Arc::clone(&state.db), app_handle)?;
         Ok(true)
     }
 }

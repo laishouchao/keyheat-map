@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Download, Sparkles, Minimize2, Github, Keyboard } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import { keyLayout60, KEYBOARD_WIDTH, KEYBOARD_HEIGHT } from '../utils/keyLayout';
+import { keyLayouts } from '../utils/keyLayout';
 import { getHeatColor, ColorScheme } from '../utils/colorUtils';
 import { formatNumber, formatDate } from '../utils/formatters';
 
@@ -56,16 +56,17 @@ async function invokeTauri<T>(command: string, args?: Record<string, unknown>): 
 function MiniKeyboard({ keyCounts, scheme }: { keyCounts: Record<string, number>; scheme: ColorScheme }) {
   const maxCount = Math.max(...Object.values(keyCounts), 1);
   const scale = 0.45;
-  const scaledWidth = KEYBOARD_WIDTH * scale;
-  const scaledHeight = KEYBOARD_HEIGHT * scale;
+  const layoutInfo = keyLayouts['60%'];
+  const scaledWidth = layoutInfo.width * scale;
+  const scaledHeight = layoutInfo.height * scale;
 
   return (
     <svg
       width={scaledWidth}
       height={scaledHeight}
-      viewBox={`0 0 ${KEYBOARD_WIDTH} ${KEYBOARD_HEIGHT}`}
+      viewBox={`0 0 ${layoutInfo.width} ${layoutInfo.height}`}
     >
-      {keyLayout60.map((k) => {
+      {layoutInfo.data.map((k) => {
         const count = keyCounts[k.key] || 0;
         const color = getHeatColor(count, maxCount, scheme);
         return (
