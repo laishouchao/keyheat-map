@@ -35,8 +35,20 @@
         "icons/128x128.png",
         "icons/128x128@2x.png",
         "icons/icon.icns",
-        "icons/icon.ico"
-      ]
+        "icons/icon.ico",
+        "icons/icon.png"
+      ],
+      "resources": [],
+      "copyright": "",
+      "category": "Utility",
+      "shortDescription": "Keyboard & Mouse Heatmap Tracker",
+      "longDescription": "A cross-platform keyboard and mouse heatmap desktop application for programmers and gamers.",
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      }
     },
     "security": {
       "csp": null
