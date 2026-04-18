@@ -47,6 +47,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Pre-cache WiX (Windows only)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          echo "Pre-caching WiX toolset..."
+          curl -L -o wix314-binaries.zip https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
+          mkdir -p "$HOME/.tauri"
+          mv wix314-binaries.zip "$HOME/.tauri/WixTools.zip"
+          echo "WiX cached successfully"
+
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
