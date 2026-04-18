@@ -74,12 +74,12 @@ fn main() {
 
             // 设置窗口大小
             main_window
-                .set_size(tauri::Size::Physical(tauri::PhysicalSize::new(900, 680)))
+                .set_size(tauri::Size::Physical(tauri::PhysicalSize::new(1100, 750)))
                 .expect("设置窗口大小失败");
 
             // 设置最小窗口尺寸
             main_window
-                .set_min_size(Some(tauri::Size::Physical(tauri::PhysicalSize::new(800, 600))))
+                .set_min_size(Some(tauri::Size::Physical(tauri::PhysicalSize::new(960, 640))))
                 .expect("设置最小窗口尺寸失败");
 
             // 窗口居中显示

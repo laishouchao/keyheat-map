@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Power, Minimize2, Globe, HardDrive, Trash2, Download,
@@ -6,7 +6,29 @@ import {
 } from 'lucide-react';
 import { ColorScheme } from '../utils/colorUtils';
 
-type KeyboardLayout = '60%' | '75%' | 'full';
+// 后端返回的类型
+interface AppSettings {
+  is_recording: boolean;
+  auto_start: boolean;
+  minimize_to_tray: boolean;
+  language: string;
+  color_scheme: string;
+  keyboard_layout: string;
+}
+
+// 安全调用 Tauri invoke
+async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      return await invoke<T>(command, args || {});
+    } catch (e) {
+      console.error(`调用 ${command} 失败:`, e);
+      return null;
+    }
+  }
+  return null;
+}
 
 // 设置项组件
 function SettingRow({
@@ -92,12 +114,85 @@ function SettingSection({
 }
 
 export default function SettingsPage() {
-  const [autoStart, setAutoStart] = useState(false);
-  const [minimizeToTray, setMinimizeToTray] = useState(true);
-  const [language, setLanguage] = useState('zh');
-  const [colorScheme, setColorScheme] = useState<ColorScheme>('neon');
-  const [keyboardLayout, setKeyboardLayout] = useState<KeyboardLayout>('60%');
+  const [settings, setSettings] = useState<AppSettings>({
+    is_recording: true,
+    auto_start: false,
+    minimize_to_tray: true,
+    language: 'zh',
+    color_scheme: 'neon',
+    keyboard_layout: '60%',
+  });
+  const [loading, setLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // 页面加载时获取设置
+  useEffect(() => {
+    invokeTauri<AppSettings>('get_app_settings').then(s => {
+      if (s) setSettings(s);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  // 更新单个设置项并保存到后端
+  const updateSetting = useCallback(async (key: keyof AppSettings, value: unknown) => {
+    const newSettings = { ...settings, [key]: value };
+    setSettings(newSettings);
+    try {
+      await invokeTauri('save_app_settings', { settings: newSettings });
+    } catch (e) {
+      console.error('保存设置失败:', e);
+    }
+  }, [settings]);
+
+  // 切换录制状态
+  const toggleRecording = useCallback(async () => {
+    try {
+      const result = await invokeTauri<boolean>('toggle_recording');
+      if (result !== null) {
+        setSettings(prev => ({ ...prev, is_recording: result }));
+      }
+    } catch (e) {
+      console.error('切换录制状态失败:', e);
+    }
+  }, []);
+
+  // 导出数据
+  const handleExport = useCallback(async (format: 'json' | 'csv') => {
+    setExporting(true);
+    try {
+      const data = await invokeTauri<string>('export_data', { format });
+      if (data) {
+        const blob = new Blob([data], {
+          type: format === 'json' ? 'application/json' : 'text/csv',
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `keyheat-data.${format}`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('导出数据失败:', e);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  // 清除数据
+  const confirmClear = useCallback(async () => {
+    setClearing(true);
+    try {
+      await invokeTauri('clear_all_data');
+      setShowClearConfirm(false);
+    } catch (e) {
+      console.error('清除数据失败:', e);
+    } finally {
+      setClearing(false);
+    }
+  }, []);
 
   const colorSchemes: { value: ColorScheme; label: string; colors: string[] }[] = [
     { value: 'neon', label: '霓虹', colors: ['#00f5d4', '#f72585', '#7b2ff7', '#fee440'] },
@@ -106,28 +201,16 @@ export default function SettingsPage() {
     { value: 'mono', label: '单色', colors: ['#4a4a66', '#6a6a8e', '#8a8ab6', '#00f5d4'] },
   ];
 
-  const handleExport = (format: 'json' | 'csv') => {
-    const mockData = { exported: true, format, timestamp: new Date().toISOString() };
-    const blob = new Blob(
-      [format === 'json' ? JSON.stringify(mockData, null, 2) : 'timestamp,action\n' + mockData.timestamp + ',export'],
-      { type: format === 'json' ? 'application/json' : 'text/csv' }
+  if (loading) {
+    return (
+      <div className="page-container">
+        <h2 className="page-title">设置</h2>
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
+          加载中...
+        </div>
+      </div>
     );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `keyheat-data.${format}`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleClearData = () => {
-    setShowClearConfirm(true);
-  };
-
-  const confirmClear = () => {
-    setShowClearConfirm(false);
-    // 实际项目中调用 Tauri 命令清除数据
-  };
+  }
 
   return (
     <div className="page-container">
@@ -137,10 +220,21 @@ export default function SettingsPage() {
       <SettingSection title="基本设置" delay={0}>
         <SettingRow
           icon={Power}
+          label="录制状态"
+          description={settings.is_recording ? '正在记录按键和鼠标数据' : '已暂停记录'}
+        >
+          <Toggle value={settings.is_recording} onChange={toggleRecording} />
+        </SettingRow>
+
+        <SettingRow
+          icon={Power}
           label="开机自启动"
           description="系统启动时自动运行 KeyHeat Map"
         >
-          <Toggle value={autoStart} onChange={setAutoStart} />
+          <Toggle
+            value={settings.auto_start}
+            onChange={(v) => updateSetting('auto_start', v)}
+          />
         </SettingRow>
 
         <SettingRow
@@ -148,7 +242,10 @@ export default function SettingsPage() {
           label="最小化到托盘"
           description="关闭窗口时最小化到系统托盘"
         >
-          <Toggle value={minimizeToTray} onChange={setMinimizeToTray} />
+          <Toggle
+            value={settings.minimize_to_tray}
+            onChange={(v) => updateSetting('minimize_to_tray', v)}
+          />
         </SettingRow>
 
         <SettingRow
@@ -158,8 +255,8 @@ export default function SettingsPage() {
         >
           <select
             className="select-field"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
+            value={settings.language}
+            onChange={(e) => updateSetting('language', e.target.value)}
             style={{ width: 140 }}
           >
             <option value="zh">中文</option>
@@ -204,10 +301,20 @@ export default function SettingsPage() {
           description="将使用数据导出为文件"
         >
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-secondary" onClick={() => handleExport('json')} style={{ padding: '6px 14px', fontSize: 12 }}>
+            <button
+              className="btn-secondary"
+              onClick={() => handleExport('json')}
+              disabled={exporting}
+              style={{ padding: '6px 14px', fontSize: 12, opacity: exporting ? 0.7 : 1 }}
+            >
               JSON
             </button>
-            <button className="btn-secondary" onClick={() => handleExport('csv')} style={{ padding: '6px 14px', fontSize: 12 }}>
+            <button
+              className="btn-secondary"
+              onClick={() => handleExport('csv')}
+              disabled={exporting}
+              style={{ padding: '6px 14px', fontSize: 12, opacity: exporting ? 0.7 : 1 }}
+            >
               CSV
             </button>
           </div>
@@ -220,7 +327,7 @@ export default function SettingsPage() {
         >
           {!showClearConfirm ? (
             <button
-              onClick={handleClearData}
+              onClick={() => setShowClearConfirm(true)}
               style={{
                 background: 'rgba(247, 37, 133, 0.1)',
                 border: '1px solid rgba(247, 37, 133, 0.3)',
@@ -238,6 +345,7 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={confirmClear}
+                disabled={clearing}
                 style={{
                   background: '#f72585',
                   border: 'none',
@@ -247,9 +355,10 @@ export default function SettingsPage() {
                   fontSize: 12,
                   cursor: 'pointer',
                   fontFamily: 'var(--font-ui)',
+                  opacity: clearing ? 0.7 : 1,
                 }}
               >
-                确认清除
+                {clearing ? '清除中...' : '确认清除'}
               </button>
               <button
                 onClick={() => setShowClearConfirm(false)}
@@ -274,14 +383,14 @@ export default function SettingsPage() {
             {colorSchemes.map((scheme) => (
               <button
                 key={scheme.value}
-                onClick={() => setColorScheme(scheme.value)}
+                onClick={() => updateSetting('color_scheme', scheme.value)}
                 style={{
                   padding: '6px 12px',
                   borderRadius: 6,
-                  border: colorScheme === scheme.value
+                  border: settings.color_scheme === scheme.value
                     ? '2px solid var(--neon-cyan)'
                     : '1px solid var(--border-primary)',
-                  background: colorScheme === scheme.value ? 'var(--bg-active)' : 'var(--bg-primary)',
+                  background: settings.color_scheme === scheme.value ? 'var(--bg-active)' : 'var(--bg-primary)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -307,8 +416,8 @@ export default function SettingsPage() {
         >
           <select
             className="select-field"
-            value={keyboardLayout}
-            onChange={(e) => setKeyboardLayout(e.target.value as KeyboardLayout)}
+            value={settings.keyboard_layout}
+            onChange={(e) => updateSetting('keyboard_layout', e.target.value)}
             style={{ width: 120 }}
           >
             <option value="60%">60%</option>

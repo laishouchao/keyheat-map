@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Sparkles, Minimize2, Github } from 'lucide-react';
+import { Download, Sparkles, Minimize2, Github, Keyboard } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { keyLayout60, KEYBOARD_WIDTH, KEYBOARD_HEIGHT } from '../utils/keyLayout';
 import { getHeatColor, ColorScheme } from '../utils/colorUtils';
@@ -8,26 +8,48 @@ import { formatNumber, formatDate } from '../utils/formatters';
 
 type PosterStyle = 'esport' | 'minimal' | 'github';
 
-// 模拟数据
-function generatePosterData() {
-  const keyCounts: Record<string, number> = {};
-  keyLayout60.forEach((k) => {
-    if (k.key === 'Space') keyCounts[k.key] = Math.floor(Math.random() * 5000) + 3000;
-    else if (['Backspace', 'Enter'].includes(k.key)) keyCounts[k.key] = Math.floor(Math.random() * 1200) + 400;
-    else if (['KeyE', 'KeyA', 'KeyI', 'KeyO', 'KeyN', 'KeyT', 'KeyR', 'KeyS', 'KeyL', 'KeyH'].includes(k.key))
-      keyCounts[k.key] = Math.floor(Math.random() * 800) + 200;
-    else keyCounts[k.key] = Math.floor(Math.random() * 400);
-  });
-  const totalKeys = Object.values(keyCounts).reduce((a, b) => a + b, 0);
-  const topKey = Object.entries(keyCounts).sort(([, a], [, b]) => b - a)[0];
-  const activeDays = Math.floor(Math.random() * 30) + 15;
+// 后端返回的类型
+interface KeyCount {
+  key_name: string;
+  count: number;
+}
 
-  // GitHub 贡献图数据
-  const contributions = Array.from({ length: 52 }, () =>
-    Array.from({ length: 7 }, () => Math.floor(Math.random() * 20))
-  );
+interface OverallStats {
+  total_keys: number;
+  total_clicks: number;
+  total_mouse_distance: number;
+  active_seconds: number;
+  total_sessions: number;
+}
 
-  return { keyCounts, totalKeys, topKey, activeDays, contributions };
+interface DailyStats {
+  date: string;
+  key_count: number;
+  click_count: number;
+  mouse_distance: number;
+}
+
+// 海报数据类型
+interface PosterData {
+  keyCounts: Record<string, number>;
+  totalKeys: number;
+  topKey: [string, number] | null;
+  activeDays: number;
+  contributions: number[][];
+}
+
+// 安全调用 Tauri invoke
+async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      return await invoke<T>(command, args || {});
+    } catch (e) {
+      console.error(`调用 ${command} 失败:`, e);
+      return null;
+    }
+  }
+  return null;
 }
 
 // 迷你键盘热力图
@@ -63,7 +85,7 @@ function MiniKeyboard({ keyCounts, scheme }: { keyCounts: Record<string, number>
 }
 
 // 电竞炫酷风海报
-function EsportPoster({ data, nickname }: { data: ReturnType<typeof generatePosterData>; nickname: string }) {
+function EsportPoster({ data, nickname }: { data: PosterData; nickname: string }) {
   return (
     <div
       style={{
@@ -143,7 +165,7 @@ function EsportPoster({ data, nickname }: { data: ReturnType<typeof generatePost
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
           {[
             { label: '总按键数', value: formatNumber(data.totalKeys), color: '#00f5d4' },
-            { label: '最常用按键', value: (data.topKey?.[0]?.replace('Key', '') || '-'), color: '#f72585' },
+            { label: '最常用按键', value: data.topKey ? data.topKey[0].replace('Key', '') : '-', color: '#f72585' },
             { label: '活跃天数', value: `${data.activeDays} 天`, color: '#fee440' },
           ].map((stat) => (
             <div key={stat.label} style={{
@@ -188,7 +210,7 @@ function EsportPoster({ data, nickname }: { data: ReturnType<typeof generatePost
 }
 
 // 极简数据风海报
-function MinimalPoster({ data, nickname }: { data: ReturnType<typeof generatePosterData>; nickname: string }) {
+function MinimalPoster({ data, nickname }: { data: PosterData; nickname: string }) {
   return (
     <div
       style={{
@@ -222,7 +244,7 @@ function MinimalPoster({ data, nickname }: { data: ReturnType<typeof generatePos
         {/* 统计卡片 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 40 }}>
           {[
-            { label: '最常用按键', value: data.topKey?.[0]?.replace('Key', '') || '-', sub: `${formatNumber(data.topKey?.[1] || 0)} 次` },
+            { label: '最常用按键', value: data.topKey ? data.topKey[0].replace('Key', '') : '-', sub: `${formatNumber(data.topKey?.[1] || 0)} 次` },
             { label: '活跃天数', value: `${data.activeDays}`, sub: '天' },
           ].map((stat) => (
             <div key={stat.label} style={{
@@ -267,7 +289,7 @@ function MinimalPoster({ data, nickname }: { data: ReturnType<typeof generatePos
 }
 
 // GitHub 贡献风海报
-function GithubPoster({ data, nickname }: { data: ReturnType<typeof generatePosterData>; nickname: string }) {
+function GithubPoster({ data, nickname }: { data: PosterData; nickname: string }) {
   const maxContrib = Math.max(...data.contributions.flat(), 1);
 
   return (
@@ -305,7 +327,7 @@ function GithubPoster({ data, nickname }: { data: ReturnType<typeof generatePost
         <div style={{ display: 'flex', gap: 24, marginBottom: 32 }}>
           {[
             { label: '总按键', value: formatNumber(data.totalKeys) },
-            { label: '最常用', value: data.topKey?.[0]?.replace('Key', '') || '-' },
+            { label: '最常用', value: data.topKey ? data.topKey[0].replace('Key', '') : '-' },
             { label: '日均', value: formatNumber(Math.floor(data.totalKeys / Math.max(data.activeDays, 1))) },
           ].map((stat) => (
             <div key={stat.label}>
@@ -364,8 +386,87 @@ export default function PosterPage() {
   const [posterStyle, setPosterStyle] = useState<PosterStyle>('esport');
   const [nickname, setNickname] = useState('键盘侠');
   const [downloading, setDownloading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const posterRef = useRef<HTMLDivElement>(null);
-  const [data] = useState(generatePosterData);
+  const [posterData, setPosterData] = useState<PosterData>({
+    keyCounts: {},
+    totalKeys: 0,
+    topKey: null,
+    activeDays: 0,
+    contributions: Array.from({ length: 52 }, () =>
+      Array.from({ length: 7 }, () => 0)
+    ),
+  });
+
+  const fetchPosterData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [stats, topKeys, heatmapData, dailyStats] = await Promise.all([
+        invokeTauri<OverallStats>('get_stats'),
+        invokeTauri<KeyCount[]>('get_top_keys', { limit: 1 }),
+        invokeTauri<KeyCount[]>('get_heatmap_data', { period: 'all' }),
+        invokeTauri<DailyStats[]>('get_daily_stats', { days: 365 }),
+      ]);
+
+      // 转换按键热力图数据
+      const keyCounts: Record<string, number> = {};
+      if (heatmapData) {
+        heatmapData.forEach(k => {
+          keyCounts[k.key_name] = k.count;
+        });
+      }
+
+      // 获取最常用按键
+      let topKey: [string, number] | null = null;
+      if (topKeys && topKeys.length > 0) {
+        topKey = [topKeys[0].key_name, topKeys[0].count];
+      }
+
+      // 计算活跃天数
+      let activeDays = 0;
+      if (dailyStats) {
+        activeDays = dailyStats.filter(d => d.key_count > 0 || d.click_count > 0).length;
+      }
+
+      // 生成贡献图数据（基于每日数据）
+      const contributions = Array.from({ length: 52 }, () =>
+        Array.from({ length: 7 }, () => 0)
+      );
+      if (dailyStats && dailyStats.length > 0) {
+        const now = new Date();
+        const oneYearAgo = new Date(now);
+        oneYearAgo.setFullYear(now.getFullYear() - 1);
+
+        dailyStats.forEach(d => {
+          const date = new Date(d.date);
+          if (date >= oneYearAgo) {
+            const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+            const weekIndex = Math.min(51, Math.floor(diffDays / 7));
+            const dayIndex = date.getDay();
+            if (weekIndex >= 0 && weekIndex < 52) {
+              contributions[weekIndex][dayIndex] = d.key_count;
+            }
+          }
+        });
+      }
+
+      setPosterData({
+        keyCounts,
+        totalKeys: stats?.total_keys || 0,
+        topKey,
+        activeDays,
+        contributions,
+      });
+    } catch (e) {
+      console.error('获取海报数据失败:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPosterData();
+  }, [fetchPosterData]);
 
   const handleDownload = useCallback(async () => {
     if (!posterRef.current) return;
@@ -392,6 +493,19 @@ export default function PosterPage() {
     minimal: { label: '极简数据', icon: Minimize2, desc: '白色背景 + 简洁设计' },
     github: { label: 'GitHub 风格', icon: Github, desc: '仿 GitHub 贡献图' },
   };
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <h2 className="page-title">分享海报</h2>
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
+          加载中...
+        </div>
+      </div>
+    );
+  }
+
+  const hasData = posterData.totalKeys > 0;
 
   return (
     <div className="page-container">
@@ -440,8 +554,8 @@ export default function PosterPage() {
           <button
             className="btn-primary"
             onClick={handleDownload}
-            disabled={downloading}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: downloading ? 0.7 : 1 }}
+            disabled={downloading || !hasData}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: (downloading || !hasData) ? 0.7 : 1 }}
           >
             <Download size={16} />
             {downloading ? '生成中...' : '下载海报'}
@@ -450,18 +564,32 @@ export default function PosterPage() {
       </div>
 
       {/* 海报预览 */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        style={{ display: 'flex', justifyContent: 'center' }}
-      >
-        <div ref={posterRef}>
-          {posterStyle === 'esport' && <EsportPoster data={data} nickname={nickname} />}
-          {posterStyle === 'minimal' && <MinimalPoster data={data} nickname={nickname} />}
-          {posterStyle === 'github' && <GithubPoster data={data} nickname={nickname} />}
+      {hasData ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          style={{ display: 'flex', justifyContent: 'center' }}
+        >
+          <div ref={posterRef}>
+            {posterStyle === 'esport' && <EsportPoster data={posterData} nickname={nickname} />}
+            {posterStyle === 'minimal' && <MinimalPoster data={posterData} nickname={nickname} />}
+            {posterStyle === 'github' && <GithubPoster data={posterData} nickname={nickname} />}
+          </div>
+        </motion.div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>
+            <Keyboard size={48} />
+          </div>
+          <div style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-secondary)' }}>
+            暂无数据生成海报
+          </div>
+          <div style={{ fontSize: 13 }}>
+            开始使用后这里将生成你的键盘使用海报
+          </div>
         </div>
-      </motion.div>
+      )}
     </div>
   );
 }

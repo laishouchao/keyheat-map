@@ -10,34 +10,38 @@ import { keyLayout60, KEYBOARD_WIDTH, KEYBOARD_HEIGHT } from '../utils/keyLayout
 import { getHeatColor, getContrastTextColor } from '../utils/colorUtils';
 import { formatNumber, formatDistance, formatDuration, formatPercent } from '../utils/formatters';
 
-// 模拟数据
-function generateMockData() {
-  const keyCounts: Record<string, number> = {};
-  keyLayout60.forEach((k) => {
-    if (k.key === 'Space') {
-      keyCounts[k.key] = Math.floor(Math.random() * 3000) + 2000;
-    } else if (['Backspace', 'Enter', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'AltLeft'].includes(k.key)) {
-      keyCounts[k.key] = Math.floor(Math.random() * 800) + 200;
-    } else if (['KeyE', 'KeyA', 'KeyI', 'KeyO', 'KeyN', 'KeyT', 'KeyR', 'KeyS', 'KeyL', 'KeyH'].includes(k.key)) {
-      keyCounts[k.key] = Math.floor(Math.random() * 600) + 100;
-    } else {
-      keyCounts[k.key] = Math.floor(Math.random() * 300);
+// 后端返回的类型
+interface OverallStats {
+  total_keys: number;
+  total_clicks: number;
+  total_mouse_distance: number;
+  active_seconds: number;
+  total_sessions: number;
+}
+
+interface KeyCount {
+  key_name: string;
+  count: number;
+}
+
+interface HourlyDistribution {
+  hour: number;
+  key_count: number;
+  click_count: number;
+}
+
+// 安全调用 Tauri invoke
+async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      return await invoke<T>(command, args || {});
+    } catch (e) {
+      console.error(`调用 ${command} 失败:`, e);
+      return null;
     }
-  });
-
-  const hourlyActivity = Array.from({ length: 24 }, (_, i) => ({
-    hour: `${String(i).padStart(2, '0')}:00`,
-    按键数: i >= 8 && i <= 23
-      ? Math.floor(Math.random() * 500) + (i >= 9 && i <= 11 ? 300 : i >= 14 && i <= 17 ? 400 : 100)
-      : Math.floor(Math.random() * 50),
-  }));
-
-  const totalKeys = Object.values(keyCounts).reduce((a, b) => a + b, 0);
-  const mouseClicks = Math.floor(Math.random() * 3000) + 1000;
-  const mouseDistance = Math.floor(Math.random() * 50000) + 10000;
-  const activeSeconds = Math.floor(Math.random() * 28800) + 3600;
-
-  return { keyCounts, hourlyActivity, totalKeys, mouseClicks, mouseDistance, activeSeconds };
+  }
+  return null;
 }
 
 // 动画数字组件
@@ -370,7 +374,94 @@ function TopKeys({ keyCounts }: { keyCounts: Record<string, number> }) {
 }
 
 export default function Dashboard() {
-  const [data] = useState(generateMockData);
+  const [stats, setStats] = useState<OverallStats | null>(null);
+  const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
+  const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const [s, h, hr] = await Promise.all([
+        invokeTauri<OverallStats>('get_stats'),
+        invokeTauri<KeyCount[]>('get_heatmap_data', { period: 'today' }),
+        invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
+      ]);
+      if (s) setStats(s);
+      if (h) setHeatmapData(h);
+      if (hr) setHourlyData(hr);
+    } catch (e) {
+      console.error('获取数据失败:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const timer = setInterval(fetchData, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 将后端 KeyCount[] 转换为 keyCounts Record（key_name -> count）
+  const keyCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    heatmapData.forEach(k => {
+      map[k.key_name] = k.count;
+    });
+    return map;
+  }, [heatmapData]);
+
+  // 将 HourlyDistribution 转换为图表数据
+  const hourlyChartData = useMemo(() => {
+    // 确保有完整的24小时数据
+    const fullData = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${String(i).padStart(2, '0')}:00`,
+      按键数: 0,
+    }));
+    hourlyData.forEach(h => {
+      if (h.hour >= 0 && h.hour < 24) {
+        fullData[h.hour] = {
+          hour: `${String(h.hour).padStart(2, '0')}:00`,
+          按键数: h.key_count,
+        };
+      }
+    });
+    return fullData;
+  }, [hourlyData]);
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
+          加载中...
+        </div>
+      </div>
+    );
+  }
+
+  const totalKeys = stats?.total_keys || 0;
+  const mouseClicks = stats?.total_clicks || 0;
+  const mouseDistance = stats?.total_mouse_distance || 0;
+  const activeSeconds = stats?.active_seconds || 0;
+  const hasData = totalKeys > 0 || mouseClicks > 0;
+
+  if (!hasData) {
+    return (
+      <div className="page-container">
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>
+            <Keyboard size={48} />
+          </div>
+          <div style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-secondary)' }}>
+            开始使用后这里将显示你的键盘热力数据
+          </div>
+          <div style={{ fontSize: 13 }}>
+            打开键盘记录功能，开始追踪你的按键习惯
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -379,7 +470,7 @@ export default function Dashboard() {
         <StatCard
           icon={Keyboard}
           label="今日按键总数"
-          value={data.totalKeys}
+          value={totalKeys}
           format={formatNumber}
           color="#00f5d4"
           delay={0}
@@ -387,7 +478,7 @@ export default function Dashboard() {
         <StatCard
           icon={MousePointer2}
           label="今日鼠标点击"
-          value={data.mouseClicks}
+          value={mouseClicks}
           format={formatNumber}
           color="#f72585"
           delay={0.05}
@@ -395,7 +486,7 @@ export default function Dashboard() {
         <StatCard
           icon={Move}
           label="鼠标移动距离"
-          value={data.mouseDistance}
+          value={mouseDistance}
           format={formatDistance}
           color="#7b2ff7"
           delay={0.1}
@@ -403,7 +494,7 @@ export default function Dashboard() {
         <StatCard
           icon={Clock}
           label="活跃时长"
-          value={data.activeSeconds}
+          value={activeSeconds}
           format={formatDuration}
           color="#fee440"
           delay={0.15}
@@ -411,12 +502,12 @@ export default function Dashboard() {
       </div>
 
       {/* 键盘热力图 */}
-      <KeyboardHeatmap keyCounts={data.keyCounts} />
+      <KeyboardHeatmap keyCounts={keyCounts} />
 
       {/* 图表区域 */}
       <div className="grid-2" style={{ marginTop: 20 }}>
-        <HourlyChart data={data.hourlyActivity} />
-        <TopKeys keyCounts={data.keyCounts} />
+        <HourlyChart data={hourlyChartData} />
+        <TopKeys keyCounts={keyCounts} />
       </div>
     </div>
   );

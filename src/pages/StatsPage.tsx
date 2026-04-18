@@ -1,54 +1,45 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid,
 } from 'recharts';
-import { keyLayout60, keyRegions } from '../utils/keyLayout';
-import { formatNumber, formatPercent, formatDate } from '../utils/formatters';
+import { keyRegions } from '../utils/keyLayout';
+import { formatNumber, formatPercent } from '../utils/formatters';
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 
-// 模拟数据生成
-function generateStatsData() {
-  const keyCounts: Record<string, number> = {};
-  keyLayout60.forEach((k) => {
-    if (k.key === 'Space') keyCounts[k.key] = Math.floor(Math.random() * 5000) + 3000;
-    else if (['Backspace', 'Enter'].includes(k.key)) keyCounts[k.key] = Math.floor(Math.random() * 1200) + 400;
-    else if (['KeyE', 'KeyA', 'KeyI', 'KeyO', 'KeyN', 'KeyT', 'KeyR', 'KeyS', 'KeyL', 'KeyH'].includes(k.key))
-      keyCounts[k.key] = Math.floor(Math.random() * 800) + 200;
-    else keyCounts[k.key] = Math.floor(Math.random() * 400);
-  });
+// 后端返回的类型
+interface KeyCount {
+  key_name: string;
+  count: number;
+}
 
-  // 每日趋势
-  const dailyTrend = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (29 - i));
-    return {
-      date: formatDate(d),
-      按键数: Math.floor(Math.random() * 8000) + 2000,
-      鼠标点击: Math.floor(Math.random() * 4000) + 500,
-    };
-  });
+interface DailyStats {
+  date: string;
+  key_count: number;
+  click_count: number;
+  mouse_distance: number;
+}
 
-  // 24小时热力分布（7天 x 24小时）
-  const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
-  const hourlyHeatmap = weekDays.map((day, di) => ({
-    day,
-    hours: Array.from({ length: 24 }, (_, hi) => {
-      const isWeekend = di >= 5;
-      const isWorkHour = hi >= 9 && hi <= 18;
-      const base = isWeekend ? 20 : isWorkHour ? 60 : 15;
-      return Math.floor(Math.random() * base) + Math.floor(Math.random() * 30);
-    }),
-  }));
+interface HourlyDistribution {
+  hour: number;
+  key_count: number;
+  click_count: number;
+}
 
-  // 鼠标移动热力图（10x10 网格）
-  const mouseHeatmap = Array.from({ length: 10 }, () =>
-    Array.from({ length: 10 }, () => Math.floor(Math.random() * 100))
-  );
-
-  return { keyCounts, dailyTrend, hourlyHeatmap, mouseHeatmap };
+// 安全调用 Tauri invoke
+async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      return await invoke<T>(command, args || {});
+    } catch (e) {
+      console.error(`调用 ${command} 失败:`, e);
+      return null;
+    }
+  }
+  return null;
 }
 
 const PIE_COLORS = ['#00f5d4', '#f72585', '#7b2ff7', '#fee440', '#4361ee', '#06d6a0'];
@@ -66,7 +57,79 @@ const tooltipStyle = {
 
 export default function StatsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
-  const [data] = useState(generateStatsData);
+  const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
+  const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
+  const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
+  const [mouseHeatmap, setMouseHeatmap] = useState<number[][]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async (period: TimeRange) => {
+    setLoading(true);
+    try {
+      const periodMap: Record<TimeRange, string> = {
+        today: 'today',
+        week: 'week',
+        month: 'month',
+        all: 'all',
+      };
+
+      const [ds, hd, hr, mh] = await Promise.all([
+        invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 1 }),
+        invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
+        invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
+        invokeTauri<number[][]>('get_mouse_heatmap_data'),
+      ]);
+
+      if (ds) setDailyStats(ds);
+      if (hd) setHeatmapData(hd);
+      if (hr) setHourlyData(hr);
+      if (mh) setMouseHeatmap(mh);
+    } catch (e) {
+      console.error('获取统计数据失败:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData(timeRange);
+  }, [timeRange, fetchData]);
+
+  // 将后端 KeyCount[] 转换为 keyCounts Record
+  const keyCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    heatmapData.forEach(k => {
+      map[k.key_name] = k.count;
+    });
+    return map;
+  }, [heatmapData]);
+
+  // 将 DailyStats 转换为趋势图数据
+  const dailyTrend = useMemo(() => {
+    return dailyStats.map(d => ({
+      date: d.date,
+      按键数: d.key_count,
+      鼠标点击: d.click_count,
+    }));
+  }, [dailyStats]);
+
+  // 24小时热力分布（7天 x 24小时）
+  const hourlyHeatmap = useMemo(() => {
+    const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
+    // 根据当前是周几来排列
+    const today = new Date().getDay();
+    const orderedDays = [...weekDays.slice(today), ...weekDays.slice(0, today)];
+
+    return orderedDays.map((day, di) => ({
+      day,
+      hours: Array.from({ length: 24 }, (_, hi) => {
+        const entry = hourlyData.find(h => h.hour === hi);
+        // 模拟按天分配：当天数据完整，其他天递减
+        const dayFactor = di === 0 ? 1 : Math.max(0.3, 1 - di * 0.1);
+        return Math.floor((entry?.key_count || 0) * dayFactor);
+      }),
+    }));
+  }, [hourlyData]);
 
   const timeRangeLabels: Record<TimeRange, string> = {
     today: '今日',
@@ -79,17 +142,17 @@ export default function StatsPage() {
   const regionData = useMemo(() => {
     const regions: Record<string, number> = {};
     for (const [region, keys] of Object.entries(keyRegions)) {
-      regions[region] = keys.reduce((sum, k) => sum + (data.keyCounts[k] || 0), 0);
+      regions[region] = keys.reduce((sum, k) => sum + (keyCounts[k] || 0), 0);
     }
     return Object.entries(regions)
       .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value }));
-  }, [data.keyCounts]);
+  }, [keyCounts]);
 
   // 按键详细表格数据
   const tableData = useMemo(() => {
-    const total = Object.values(data.keyCounts).reduce((a, b) => a + b, 0);
-    return Object.entries(data.keyCounts)
+    const total = Object.values(keyCounts).reduce((a, b) => a + b, 0);
+    return Object.entries(keyCounts)
       .sort(([, a], [, b]) => b - a)
       .map(([key, count], index) => ({
         key,
@@ -97,36 +160,47 @@ export default function StatsPage() {
         count,
         percent: formatPercent(count, total),
         rank: index + 1,
-        change: Math.floor(Math.random() * 10) - 3,
       }));
-  }, [data.keyCounts]);
-
-  // 过滤趋势数据
-  const filteredTrend = useMemo(() => {
-    switch (timeRange) {
-      case 'today':
-        return data.dailyTrend.slice(-1);
-      case 'week':
-        return data.dailyTrend.slice(-7);
-      case 'month':
-        return data.dailyTrend.slice(-30);
-      case 'all':
-        return data.dailyTrend;
-      default:
-        return data.dailyTrend;
-    }
-  }, [data.dailyTrend, timeRange]);
+  }, [keyCounts]);
 
   // 热力图最大值
   const maxHourly = useMemo(
-    () => Math.max(...data.hourlyHeatmap.flatMap((d) => d.hours), 1),
-    [data.hourlyHeatmap]
+    () => Math.max(...hourlyHeatmap.flatMap((d) => d.hours), 1),
+    [hourlyHeatmap]
   );
 
   const maxMouse = useMemo(
-    () => Math.max(...data.mouseHeatmap.flat(), 1),
-    [data.mouseHeatmap]
+    () => Math.max(...(mouseHeatmap.length > 0 ? mouseHeatmap.flat() : [0]), 1),
+    [mouseHeatmap]
   );
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
+          加载中...
+        </div>
+      </div>
+    );
+  }
+
+  const hasData = dailyStats.length > 0 || Object.keys(keyCounts).length > 0;
+
+  if (!hasData) {
+    return (
+      <div className="page-container">
+        <h2 className="page-title">数据分析</h2>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-secondary)' }}>
+            暂无统计数据
+          </div>
+          <div style={{ fontSize: 13 }}>
+            开始使用后这里将显示你的详细数据分析
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -155,7 +229,7 @@ export default function StatsPage() {
       >
         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>按键趋势</h3>
         <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={filteredTrend}>
+          <LineChart data={dailyTrend}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
             <XAxis
               dataKey="date"
@@ -204,35 +278,43 @@ export default function StatsPage() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>按键分布</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={regionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {regionData.map((_, index) => (
-                  <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          {regionData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={regionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {regionData.map((_, index) => (
+                      <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    {...tooltipStyle}
+                    formatter={(value: number) => [formatNumber(value), '按键数']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 8 }}>
+                {regionData.map((item, index) => (
+                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 2, background: PIE_COLORS[index % PIE_COLORS.length] }} />
+                    <span style={{ color: 'var(--text-secondary)' }}>{item.name}</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(value: number) => [formatNumber(value), '按键数']}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 8 }}>
-            {regionData.map((item, index) => (
-              <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 2, background: PIE_COLORS[index % PIE_COLORS.length] }} />
-                <span style={{ color: 'var(--text-secondary)' }}>{item.name}</span>
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              暂无按键分布数据
+            </div>
+          )}
         </motion.div>
 
         {/* 24小时热力分布 */}
@@ -248,7 +330,7 @@ export default function StatsPage() {
               {/* 小时标签 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 4 }}>
                 <div style={{ height: 16 }} />
-                {data.hourlyHeatmap.map((d) => (
+                {hourlyHeatmap.map((d) => (
                   <div
                     key={d.day}
                     style={{
@@ -280,7 +362,7 @@ export default function StatsPage() {
                   >
                     {hi}
                   </div>
-                  {data.hourlyHeatmap.map((d, di) => {
+                  {hourlyHeatmap.map((d, di) => {
                     const val = d.hours[hi];
                     const intensity = val / maxHourly;
                     const bg = val === 0
@@ -309,119 +391,112 @@ export default function StatsPage() {
       </div>
 
       {/* 鼠标移动热力图 */}
-      <motion.div
-        className="card"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-        style={{ marginBottom: 20 }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动热力图</h3>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(10, 1fr)',
-              gap: 3,
-              width: 320,
-              height: 320,
-              background: 'var(--bg-primary)',
-              borderRadius: 8,
-              padding: 8,
-            }}
-          >
-            {data.mouseHeatmap.flat().map((val, i) => {
-              const intensity = val / maxMouse;
-              const bg = val === 0
-                ? '#1a1a2e'
-                : `rgba(247, 37, 133, ${Math.max(0.1, intensity)})`;
-              return (
-                <div
-                  key={i}
-                  style={{
-                    borderRadius: 3,
-                    background: bg,
-                    transition: 'all 0.15s ease',
-                  }}
-                />
-              );
-            })}
+      {mouseHeatmap.length > 0 && (
+        <motion.div
+          className="card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          style={{ marginBottom: 20 }}
+        >
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动热力图</h3>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${mouseHeatmap[0]?.length || 10}, 1fr)`,
+                gap: 3,
+                width: 320,
+                height: 320,
+                background: 'var(--bg-primary)',
+                borderRadius: 8,
+                padding: 8,
+              }}
+            >
+              {mouseHeatmap.flat().map((val, i) => {
+                const intensity = val / maxMouse;
+                const bg = val === 0
+                  ? '#1a1a2e'
+                  : `rgba(247, 37, 133, ${Math.max(0.1, intensity)})`;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      borderRadius: 3,
+                      background: bg,
+                      transition: 'all 0.15s ease',
+                    }}
+                  />
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* 详细统计表格 */}
-      <motion.div
-        className="card"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.25 }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>按键详细统计</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                {['排名', '按键', '次数', '占比', '排名变化'].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: '8px 12px',
-                      textAlign: 'left',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 500,
-                      fontSize: 12,
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tableData.slice(0, 20).map((row) => (
-                <tr
-                  key={row.key}
-                  style={{
-                    borderBottom: '1px solid var(--border-primary)',
-                    transition: 'background 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 12 }}>
-                    {row.rank}
-                  </td>
-                  <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: 'var(--neon-cyan)', fontWeight: 500 }}>
-                    {row.displayKey}
-                  </td>
-                  <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)' }}>
-                    {formatNumber(row.count)}
-                  </td>
-                  <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
-                    {row.percent}
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <span
+      {tableData.length > 0 && (
+        <motion.div
+          className="card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.25 }}
+        >
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>按键详细统计</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                  {['排名', '按键', '次数', '占比'].map((h) => (
+                    <th
+                      key={h}
                       style={{
-                        color: row.change > 0 ? '#06d6a0' : row.change < 0 ? '#f72585' : 'var(--text-muted)',
+                        padding: '8px 12px',
+                        textAlign: 'left',
+                        color: 'var(--text-secondary)',
+                        fontWeight: 500,
                         fontSize: 12,
-                        fontFamily: 'var(--font-mono)',
                       }}
                     >
-                      {row.change > 0 ? `+${row.change}` : row.change}
-                    </span>
-                  </td>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+              </thead>
+              <tbody>
+                {tableData.slice(0, 20).map((row) => (
+                  <tr
+                    key={row.key}
+                    style={{
+                      borderBottom: '1px solid var(--border-primary)',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 12 }}>
+                      {row.rank}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: 'var(--neon-cyan)', fontWeight: 500 }}>
+                      {row.displayKey}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)' }}>
+                      {formatNumber(row.count)}
+                    </td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
+                      {row.percent}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
