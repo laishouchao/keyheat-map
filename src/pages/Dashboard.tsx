@@ -128,58 +128,6 @@ function StatCard({
   );
 }
 
-// 将浏览器 KeyboardEvent 映射到 keyLayout 中的 key 标识
-function mapEventToKey(e: KeyboardEvent): string | null {
-  const code = e.code;
-  if (code.startsWith('Key')) return code;
-  if (code.startsWith('Digit')) return code;
-  if (code === 'Space') return 'Space';
-  if (code === 'ShiftLeft') return 'ShiftLeft';
-  if (code === 'ShiftRight') return 'ShiftRight';
-  if (code === 'ControlLeft') return 'ControlLeft';
-  if (code === 'ControlRight') return 'ControlRight';
-  if (code === 'AltLeft') return 'AltLeft';
-  if (code === 'AltRight') return 'AltRight';
-  if (code === 'MetaLeft') return 'MetaLeft';
-  if (code === 'MetaRight') return 'MetaRight';
-  if (code === 'CapsLock') return 'CapsLock';
-  if (code === 'Tab') return 'Tab';
-  if (code === 'Enter') return 'Enter';
-  if (code === 'Backspace') return 'Backspace';
-  if (code === 'Delete') return 'Delete';
-  if (code === 'Insert') return 'Insert';
-  if (code === 'Home') return 'Home';
-  if (code === 'End') return 'End';
-  if (code === 'PageUp') return 'PageUp';
-  if (code === 'PageDown') return 'PageDown';
-  if (code === 'ArrowUp') return 'ArrowUp';
-  if (code === 'ArrowDown') return 'ArrowDown';
-  if (code === 'ArrowLeft') return 'ArrowLeft';
-  if (code === 'ArrowRight') return 'ArrowRight';
-  if (code.startsWith('F') && code.length <= 3) {
-    const num = parseInt(code.slice(1));
-    if (num >= 1 && num <= 12) return `F${num}`;
-  }
-  if (code === 'Escape') return 'Escape';
-  if (code === 'BracketLeft') return 'BracketLeft';
-  if (code === 'BracketRight') return 'BracketRight';
-  if (code === 'Semicolon') return 'Semicolon';
-  if (code === 'Quote') return 'Quote';
-  if (code === 'Backquote') return 'Backquote';
-  if (code === 'Backslash') return 'Backslash';
-  if (code === 'Slash') return 'Slash';
-  if (code === 'Period') return 'Period';
-  if (code === 'Comma') return 'Comma';
-  if (code === 'Minus') return 'Minus';
-  if (code === 'Equal') return 'Equal';
-  if (code === 'ContextMenu') return 'ContextMenu';
-  if (code === 'PrintScreen') return 'PrintScreen';
-  if (code === 'ScrollLock') return 'ScrollLock';
-  if (code === 'Pause') return 'Pause';
-  if (code.startsWith('Numpad')) return code;
-  return null;
-}
-
 // 高亮时稍微提亮颜色
 function brightenColor(color: string): string {
   if (color === '#1a1a2e' || color === '#13131a') return '#2a3a4e';
@@ -204,32 +152,36 @@ function KeyboardHeatmap({ keyCounts, colorScheme = 'neon', layout = '60%' }: { 
   const kbWidth = layoutInfo.width;
   const kbHeight = layoutInfo.height;
 
-  // 监听键盘事件实现实时高亮
+  // 监听后端 Tauri 事件实现实时高亮（不使用浏览器 keydown/keyup，避免事件冲突）
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const mappedKey = mapEventToKey(e);
-      if (mappedKey) {
-        setActiveKeys(prev => new Set(prev).add(mappedKey));
-      }
-    };
+    let unlistenOn: (() => void) | null = null;
+    let unlistenOff: (() => void) | null = null;
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      const mappedKey = mapEventToKey(e);
-      if (mappedKey) {
-        setActiveKeys(prev => {
-          const next = new Set(prev);
-          next.delete(mappedKey);
-          return next;
-        });
-      }
-    };
+    if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen<string>('key-highlight-on', (event) => {
+          const keyName = event.payload;
+          if (keyName) {
+            setActiveKeys(prev => new Set(prev).add(keyName));
+          }
+        }).then(fn => { unlistenOn = fn; }).catch(() => {});
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+        listen<string>('key-highlight-off', (event) => {
+          const keyName = event.payload;
+          if (keyName) {
+            setActiveKeys(prev => {
+              const next = new Set(prev);
+              next.delete(keyName);
+              return next;
+            });
+          }
+        }).then(fn => { unlistenOff = fn; }).catch(() => {});
+      });
+    }
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      if (unlistenOn) unlistenOn();
+      if (unlistenOff) unlistenOff();
     };
   }, []);
 

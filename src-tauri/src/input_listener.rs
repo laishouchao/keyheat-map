@@ -14,6 +14,9 @@ pub enum InputEvent {
         key_code: Option<i32>,
         timestamp: String,
     },
+    KeyRelease {
+        key_name: String,
+    },
     ComboKeyPress {
         combo_name: String,
         timestamp: String,
@@ -199,6 +202,8 @@ impl InputListener {
                             });
                         }
                         rdev::EventType::KeyRelease(key) => {
+                            let key_name = normalize_key_name(&key);
+
                             // 如果是修饰键，从 pressed_modifiers 中移除
                             if is_modifier_key(&key) {
                                 let label = get_modifier_label(&key);
@@ -206,6 +211,11 @@ impl InputListener {
                                     mods.retain(|m| m != label);
                                 }
                             }
+
+                            // 发送按键释放事件（用于前端高亮）
+                            let _ = tx.send(InputEvent::KeyRelease {
+                                key_name,
+                            });
                         }
                         rdev::EventType::ButtonPress(button) => {
                             // rdev 0.5 中 Event 没有 position 字段
@@ -272,8 +282,14 @@ impl InputListener {
                 timestamp,
             } => {
                 db.insert_key_event(key_name, *key_code, timestamp, &session_id_str)?;
-                // 推送事件通知前端刷新
+                // 推送按键高亮事件（前端用于实时高亮显示）
+                let _ = app_handle.emit_all("key-highlight-on", key_name);
+                // 推送数据刷新事件
                 let _ = app_handle.emit_all("input-event", "key_press");
+            }
+            InputEvent::KeyRelease { key_name } => {
+                // 推送按键释放高亮事件
+                let _ = app_handle.emit_all("key-highlight-off", key_name);
             }
             InputEvent::ComboKeyPress { combo_name, timestamp } => {
                 db.insert_combo_event(combo_name, timestamp, &session_id_str)?;
