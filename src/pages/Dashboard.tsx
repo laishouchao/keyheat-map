@@ -115,9 +115,66 @@ function StatCard({
   );
 }
 
+// 将浏览器 KeyboardEvent 映射到 keyLayout 中的 key 标识
+function mapEventToKey(e: KeyboardEvent): string | null {
+  const code = e.code;
+
+  // 直接匹配（大部分按键 code 和 rdev 格式一致）
+  if (code.startsWith('Key')) return code; // "KeyA" -> "KeyA"
+  if (code.startsWith('Digit')) return code.replace('Digit', 'Num'); // "Digit1" -> "Num1"
+  if (code === 'Space') return 'Space';
+  if (code === 'ShiftLeft') return 'ShiftLeft';
+  if (code === 'ShiftRight') return 'ShiftRight';
+  if (code === 'ControlLeft') return 'ControlLeft';
+  if (code === 'ControlRight') return 'ControlRight';
+  if (code === 'AltLeft') return 'Alt';
+  if (code === 'AltRight') return 'AltGr';
+  if (code === 'MetaLeft') return 'MetaLeft';
+  if (code === 'MetaRight') return 'MetaRight';
+  if (code === 'CapsLock') return 'CapsLock';
+  if (code === 'Tab') return 'Tab';
+  if (code === 'Enter') return 'Return';
+  if (code === 'Backspace') return 'Backspace';
+  if (code === 'Delete') return 'Delete';
+  if (code === 'Insert') return 'Insert';
+  if (code === 'Home') return 'Home';
+  if (code === 'End') return 'End';
+  if (code === 'PageUp') return 'PageUp';
+  if (code === 'PageDown') return 'PageDown';
+  if (code === 'ArrowUp') return 'UpArrow';
+  if (code === 'ArrowDown') return 'DownArrow';
+  if (code === 'ArrowLeft') return 'LeftArrow';
+  if (code === 'ArrowRight') return 'RightArrow';
+  if (code.startsWith('F') && code.length <= 3) {
+    const num = parseInt(code.slice(1));
+    if (num >= 1 && num <= 12) return `F${num}`;
+  }
+  if (code === 'Escape') return 'Escape';
+  if (code === 'BracketLeft') return 'BracketLeft';
+  if (code === 'BracketRight') return 'BracketRight';
+  if (code === 'Semicolon') return 'Semicolon';
+  if (code === 'Quote') return 'Quote';
+  if (code === 'Backquote') return 'BackQuote';
+  if (code === 'Backslash') return 'BackSlash';
+  if (code === 'Slash') return 'Slash';
+  if (code === 'Period') return 'Period';
+  if (code === 'Comma') return 'Comma';
+  if (code === 'Minus') return 'Minus';
+  if (code === 'Equal') return 'Equal';
+
+  return null;
+}
+
+// 高亮时稍微提亮颜色
+function brightenColor(color: string): string {
+  if (color === '#1a1a2e' || color === '#13131a') return '#2a3a4e';
+  return color;
+}
+
 // 键盘热力图
 function KeyboardHeatmap({ keyCounts }: { keyCounts: Record<string, number> }) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // 当前按下的键
   const maxCount = useMemo(
     () => Math.max(...Object.values(keyCounts), 1),
     [keyCounts]
@@ -126,6 +183,35 @@ function KeyboardHeatmap({ keyCounts }: { keyCounts: Record<string, number> }) {
     () => Object.values(keyCounts).reduce((a, b) => a + b, 0),
     [keyCounts]
   );
+
+  // 监听键盘事件实现实时高亮
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mappedKey = mapEventToKey(e);
+      if (mappedKey) {
+        setActiveKeys(prev => new Set(prev).add(mappedKey));
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const mappedKey = mapEventToKey(e);
+      if (mappedKey) {
+        setActiveKeys(prev => {
+          const next = new Set(prev);
+          next.delete(mappedKey);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const hoveredData = hoveredKey
     ? { count: keyCounts[hoveredKey] || 0, percent: formatPercent(keyCounts[hoveredKey] || 0, totalKeys) }
@@ -158,19 +244,24 @@ function KeyboardHeatmap({ keyCounts }: { keyCounts: Record<string, number> }) {
             const color = getHeatColor(count, maxCount);
             const textColor = getContrastTextColor(color);
             const isHovered = hoveredKey === k.key;
+            const isActive = activeKeys.has(k.key);
 
             return (
-              <g key={k.key}>
+              <g key={k.key} style={{ transition: 'all 0.1s ease' }}>
                 <rect
                   x={k.x}
                   y={k.y}
                   width={k.width}
                   height={46}
                   rx={6}
-                  fill={color}
-                  stroke={isHovered ? 'var(--neon-cyan)' : 'transparent'}
-                  strokeWidth={isHovered ? 2 : 0}
-                  style={{ cursor: 'pointer', transition: 'stroke 0.15s ease' }}
+                  fill={isActive ? brightenColor(color) : color}
+                  stroke={isActive ? '#00f5d4' : (isHovered ? 'var(--neon-cyan)' : 'transparent')}
+                  strokeWidth={isActive ? 2.5 : (isHovered ? 2 : 0)}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.1s ease',
+                    filter: isActive ? 'drop-shadow(0 0 8px rgba(0, 245, 212, 0.6))' : 'none',
+                  }}
                   onMouseEnter={() => setHoveredKey(k.key)}
                   onMouseLeave={() => setHoveredKey(null)}
                 />

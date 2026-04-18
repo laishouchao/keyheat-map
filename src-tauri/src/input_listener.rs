@@ -13,6 +13,10 @@ pub enum InputEvent {
         key_code: Option<i32>,
         timestamp: String,
     },
+    ComboKeyPress {
+        combo_name: String,
+        timestamp: String,
+    },
     MouseClick {
         x: i32,
         y: i32,
@@ -43,6 +47,8 @@ pub struct InputListener {
     event_tx: Option<Sender<InputEvent>>,
     /// 当前会话 ID
     session_id: Arc<std::sync::Mutex<String>>,
+    /// 当前按下的修饰键（用于组合键检测）
+    pressed_modifiers: Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl InputListener {
@@ -54,6 +60,7 @@ impl InputListener {
             is_listening: Arc::new(AtomicBool::new(false)),
             event_tx: None,
             session_id: Arc::new(std::sync::Mutex::new(String::new())),
+            pressed_modifiers: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -122,6 +129,7 @@ impl InputListener {
 
         // 启动 rdev 监听线程（rdev::listen 是阻塞的）
         let listener_is_listening = Arc::clone(&self.is_listening);
+        let modifiers_arc = Arc::clone(&self.pressed_modifiers);
         let listener_thread = thread::Builder::new()
             .name("input-listener".to_string())
             .spawn(move || {
@@ -135,62 +143,102 @@ impl InputListener {
 
                     // rdev 0.5 中 Event 只有 time, name, event_type 三个字段
                     // 鼠标位置需要从 EventType::MouseMove 中获取
-                    let input_event = match event.event_type {
+                    match event.event_type {
                         rdev::EventType::KeyPress(key) => {
                             let key_name = format!("{:?}", key);
                             let key_code = key_to_code(&key);
-                            Some(InputEvent::KeyPress {
+                            let timestamp = chrono::Local::now().to_rfc3339();
+
+                            // 检查是否是修饰键
+                            if is_modifier_key(&key) {
+                                // 添加到已按下的修饰键列表
+                                let label = get_modifier_label(&key).to_string();
+                                if let Ok(mut mods) = modifiers_arc.lock() {
+                                    if !mods.contains(&label) {
+                                        mods.push(label);
+                                    }
+                                }
+                            } else {
+                                // 非修饰键：检查是否有修饰键按下，组成组合键
+                                let combo_name = {
+                                    if let Ok(mods) = modifiers_arc.lock() {
+                                        if !mods.is_empty() {
+                                            // 按固定顺序排列修饰键：Ctrl, Shift, Alt, AltGr, Meta
+                                            let mut sorted_mods = mods.clone();
+                                            let order = ["Ctrl", "Shift", "Alt", "AltGr", "Meta"];
+                                            sorted_mods.sort_by_key(|m| {
+                                                order.iter().position(|&o| o == *m).unwrap_or(999)
+                                            });
+                                            let key_label = get_key_label(&key);
+                                            Some(format!("{}+{}", sorted_mods.join("+"), key_label))
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                };
+
+                                // 发送组合键事件（如果存在）
+                                if let Some(combo) = combo_name {
+                                    let _ = tx.send(InputEvent::ComboKeyPress {
+                                        combo_name: combo,
+                                        timestamp: timestamp.clone(),
+                                    });
+                                }
+                            }
+
+                            // 同时发送普通的 KeyPress 事件
+                            let _ = tx.send(InputEvent::KeyPress {
                                 key_name,
                                 key_code,
-                                timestamp: chrono::Local::now().to_rfc3339(),
-                            })
+                                timestamp,
+                            });
                         }
-                        rdev::EventType::KeyRelease(_key) => {
-                            // 忽略按键释放事件
-                            None
+                        rdev::EventType::KeyRelease(key) => {
+                            // 如果是修饰键，从 pressed_modifiers 中移除
+                            if is_modifier_key(&key) {
+                                let label = get_modifier_label(&key);
+                                if let Ok(mut mods) = modifiers_arc.lock() {
+                                    mods.retain(|m| m != label);
+                                }
+                            }
                         }
                         rdev::EventType::ButtonPress(button) => {
                             // rdev 0.5 中 Event 没有 position 字段
                             // 鼠标点击时无法直接获取坐标，使用 (0, 0) 作为占位
                             match button {
                                 rdev::Button::Left | rdev::Button::Right | rdev::Button::Middle => {
-                                    Some(InputEvent::MouseClick {
+                                    let _ = tx.send(InputEvent::MouseClick {
                                         x: 0,
                                         y: 0,
                                         timestamp: chrono::Local::now().to_rfc3339(),
-                                    })
+                                    });
                                 }
-                                _ => None,
+                                _ => {}
                             }
                         }
                         rdev::EventType::ButtonRelease(_button) => {
                             // 忽略鼠标释放事件
-                            None
                         }
                         rdev::EventType::MouseMove { x, y } => {
-                            Some(InputEvent::MouseMove {
+                            let _ = tx.send(InputEvent::MouseMove {
                                 x: x as i32,
                                 y: y as i32,
                                 distance: 0.0, // 距离在处理线程中计算
                                 timestamp: chrono::Local::now().to_rfc3339(),
-                            })
+                            });
                         }
                         rdev::EventType::Wheel { delta_x: _, delta_y: _ } => {
                             // rdev 0.5 中 Event 没有 position 字段
                             // 滚轮事件无法直接获取坐标，使用 (0, 0) 作为占位
-                            Some(InputEvent::MouseScroll {
+                            let _ = tx.send(InputEvent::MouseScroll {
                                 x: 0,
                                 y: 0,
                                 timestamp: chrono::Local::now().to_rfc3339(),
-                            })
+                            });
                         }
                     };
-
-                    if let Some(evt) = input_event {
-                        // 使用 send 避免阻塞监听线程
-                        // 注意：rdev 回调可能不是 Send 的，所以用 send 而非 try_send
-                        let _ = tx.send(evt);
-                    }
                 });
             })
             .map_err(|e| format!("启动输入监听线程失败: {}", e))?;
@@ -219,6 +267,9 @@ impl InputListener {
                 timestamp,
             } => {
                 db.insert_key_event(key_name, *key_code, timestamp, &session_id_str)?;
+            }
+            InputEvent::ComboKeyPress { combo_name, timestamp } => {
+                db.insert_combo_event(combo_name, timestamp, &session_id_str)?;
             }
             InputEvent::MouseClick { x, y, timestamp } => {
                 db.insert_mouse_event("click", *x, *y, timestamp, &session_id_str)?;
@@ -366,4 +417,33 @@ fn key_to_code(key: &rdev::Key) -> Option<i32> {
         _ => return None,
     };
     Some(code)
+}
+
+/// 判断是否是修饰键
+fn is_modifier_key(key: &rdev::Key) -> bool {
+    matches!(key,
+        rdev::Key::ShiftLeft | rdev::Key::ShiftRight |
+        rdev::Key::ControlLeft | rdev::Key::ControlRight |
+        rdev::Key::Alt | rdev::Key::AltGr |
+        rdev::Key::MetaLeft | rdev::Key::MetaRight
+    )
+}
+
+/// 获取修饰键的标签名称
+fn get_modifier_label(key: &rdev::Key) -> &'static str {
+    match key {
+        rdev::Key::ShiftLeft | rdev::Key::ShiftRight => "Shift",
+        rdev::Key::ControlLeft | rdev::Key::ControlRight => "Ctrl",
+        rdev::Key::Alt => "Alt",
+        rdev::Key::AltGr => "AltGr",
+        rdev::Key::MetaLeft | rdev::Key::MetaRight => "Meta",
+        _ => "",
+    }
+}
+
+/// 获取按键的显示标签
+fn get_key_label(key: &rdev::Key) -> String {
+    let name = format!("{:?}", key);
+    // 清理名称：移除 "Key" 和 "Num" 前缀
+    name.replace("Key", "").replace("Num", "")
 }

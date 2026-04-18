@@ -35,6 +35,8 @@ fn main() {
             commands::save_app_settings,
             commands::toggle_recording,
             commands::get_recording_status,
+            commands::get_top_combos,
+            commands::get_combo_stats,
         ])
         // 应用启动后初始化
         .setup(move |app| {

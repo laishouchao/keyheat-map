@@ -61,6 +61,7 @@ export default function StatsPage() {
   const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
   const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
   const [mouseHeatmap, setMouseHeatmap] = useState<number[][]>([]);
+  const [comboStats, setComboStats] = useState<{combo_name: string; count: number}[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (period: TimeRange) => {
@@ -73,17 +74,19 @@ export default function StatsPage() {
         all: 'all',
       };
 
-      const [ds, hd, hr, mh] = await Promise.all([
+      const [ds, hd, hr, mh, cs] = await Promise.all([
         invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 1 }),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
         invokeTauri<number[][]>('get_mouse_heatmap_data'),
+        invokeTauri<{combo_name: string; count: number}[]>('get_combo_stats', { period: periodMap[period] }),
       ]);
 
       if (ds) setDailyStats(ds);
       if (hd) setHeatmapData(hd);
       if (hr) setHourlyData(hr);
       if (mh) setMouseHeatmap(mh);
+      if (cs) setComboStats(cs);
     } catch (e) {
       console.error('获取统计数据失败:', e);
     } finally {
@@ -389,6 +392,65 @@ export default function StatsPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* 组合快捷键排行 */}
+      {comboStats.length > 0 && (
+        <motion.div
+          className="card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.18 }}
+          style={{ marginBottom: 20 }}
+        >
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>组合快捷键排行</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {comboStats.slice(0, 15).map((combo, index) => {
+              const maxComboCount = comboStats[0]?.count || 1;
+              return (
+                <div key={combo.combo_name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{
+                    width: 20,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-mono)',
+                    color: index === 0 ? '#fee440' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : 'var(--text-muted)',
+                  }}>
+                    #{index + 1}
+                  </span>
+                  <span style={{
+                    minWidth: 100,
+                    fontSize: 13,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--neon-cyan)',
+                    fontWeight: 600,
+                    background: 'var(--bg-primary)',
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border-secondary)',
+                  }}>
+                    {combo.combo_name}
+                  </span>
+                  <div style={{ flex: 1, height: 20, background: 'var(--bg-primary)', borderRadius: 4, overflow: 'hidden' }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(combo.count / maxComboCount) * 100}%` }}
+                      transition={{ duration: 0.8, delay: 0.2 + index * 0.05 }}
+                      style={{
+                        height: '100%',
+                        background: `linear-gradient(90deg, #f72585, #7b2ff7)`,
+                        borderRadius: 4,
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', width: 50, textAlign: 'right' }}>
+                    {formatNumber(combo.count)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       {/* 鼠标移动热力图 */}
       {mouseHeatmap.length > 0 && (

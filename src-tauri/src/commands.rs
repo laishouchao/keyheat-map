@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use crate::db::{AppSettings, Database, DailyStats, HourlyDistribution, KeyCount, OverallStats, Session};
+use crate::db::{AppSettings, ComboKeyCount, Database, DailyStats, HourlyDistribution, KeyCount, OverallStats, Session};
 use crate::input_listener::InputListener;
 
 /// 应用共享状态
@@ -158,4 +158,20 @@ pub fn toggle_recording(state: tauri::State<AppState>) -> Result<bool, String> {
 pub fn get_recording_status(state: tauri::State<AppState>) -> Result<bool, String> {
     let listener = state.listener.lock().map_err(|e| e.to_string())?;
     Ok(listener.is_running())
+}
+
+/// 获取组合快捷键排行
+#[tauri::command]
+pub fn get_top_combos(state: tauri::State<AppState>, limit: i32) -> Result<Vec<ComboKeyCount>, String> {
+    let limit = limit.clamp(1, 100);
+    state.db.get_top_combos(limit)
+}
+
+/// 获取指定时间段的组合键统计
+#[tauri::command]
+pub fn get_combo_stats(
+    state: tauri::State<AppState>,
+    period: String,
+) -> Result<Vec<ComboKeyCount>, String> {
+    state.db.get_combo_stats(&period)
 }

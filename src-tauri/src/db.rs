@@ -47,6 +47,13 @@ pub struct KeyCount {
     pub count: i64,
 }
 
+/// 组合快捷键统计
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComboKeyCount {
+    pub combo_name: String,  // 如 "Ctrl+C", "Ctrl+V", "Alt+Tab"
+    pub count: i64,
+}
+
 /// 每日统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DailyStats {
@@ -180,6 +187,16 @@ impl Database {
             );
 
             CREATE INDEX IF NOT EXISTS idx_mouse_positions_timestamp ON mouse_positions(timestamp);
+
+            CREATE TABLE IF NOT EXISTS combo_key_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                combo_name TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                session_id TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_combo_key_events_timestamp ON combo_key_events(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_combo_key_events_combo ON combo_key_events(combo_name);
             ",
         )
         .map_err(|e| format!("创建表失败: {}", e))?;
@@ -646,6 +663,66 @@ impl Database {
         Ok(())
     }
 
+    // ==================== 组合键事件操作 ====================
+
+    /// 插入组合键事件
+    pub fn insert_combo_event(&self, combo_name: &str, timestamp: &str, session_id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO combo_key_events (combo_name, timestamp, session_id) VALUES (?1, ?2, ?3)",
+            params![combo_name, timestamp, session_id],
+        ).map_err(|e| format!("插入组合键事件失败: {}", e))?;
+        Ok(())
+    }
+
+    /// 获取组合快捷键排行
+    pub fn get_top_combos(&self, limit: i32) -> Result<Vec<ComboKeyCount>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT combo_name, COUNT(*) as count FROM combo_key_events GROUP BY combo_name ORDER BY count DESC LIMIT ?1"
+        ).map_err(|e| format!("查询组合键排行失败: {}", e))?;
+
+        let data = stmt.query_map(params![limit], |row| {
+            Ok(ComboKeyCount {
+                combo_name: row.get(0)?,
+                count: row.get(1)?,
+            })
+        }).map_err(|e| format!("映射组合键数据失败: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("收集组合键数据失败: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// 获取指定时间段的组合键统计
+    pub fn get_combo_stats(&self, period: &str) -> Result<Vec<ComboKeyCount>, String> {
+        let time_filter = match period {
+            "today" => "date(timestamp) = date('now', 'localtime')",
+            "week" => "date(timestamp) >= date('now', '-7 days', 'localtime')",
+            "month" => "date(timestamp) >= date('now', '-30 days', 'localtime')",
+            _ => "1=1",
+        };
+
+        let query = format!(
+            "SELECT combo_name, COUNT(*) as count FROM combo_key_events WHERE {} GROUP BY combo_name ORDER BY count DESC",
+            time_filter
+        );
+
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(&query).map_err(|e| format!("查询组合键统计失败: {}", e))?;
+
+        let data = stmt.query_map([], |row| {
+            Ok(ComboKeyCount {
+                combo_name: row.get(0)?,
+                count: row.get(1)?,
+            })
+        }).map_err(|e| format!("映射组合键数据失败: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("收集组合键数据失败: {}", e))?;
+
+        Ok(data)
+    }
+
     // ==================== 数据管理 ====================
 
     /// 清除所有数据
@@ -655,7 +732,8 @@ impl Database {
             "DELETE FROM key_events;
              DELETE FROM mouse_events;
              DELETE FROM mouse_positions;
-             DELETE FROM sessions;",
+             DELETE FROM sessions;
+             DELETE FROM combo_key_events;"
         )
         .map_err(|e| format!("清除数据失败: {}", e))?;
 
@@ -673,6 +751,7 @@ impl Database {
         let mut key_events: Vec<KeyEvent> = Vec::new();
         let mut mouse_events: Vec<MouseEvent> = Vec::new();
         let mut sessions: Vec<Session> = Vec::new();
+        let mut combo_key_events: Vec<ComboKeyCount> = Vec::new();
 
         // 查询键盘事件
         {
@@ -745,11 +824,32 @@ impl Database {
             }
         }
 
+        // 查询组合键事件
+        {
+            let mut stmt = conn
+                .prepare("SELECT combo_name, COUNT(*) as count FROM combo_key_events GROUP BY combo_name ORDER BY count DESC")
+                .map_err(|e| format!("查询组合键事件失败: {}", e))?;
+
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(ComboKeyCount {
+                        combo_name: row.get(0)?,
+                        count: row.get(1)?,
+                    })
+                })
+                .map_err(|e| format!("映射组合键事件失败: {}", e))?;
+
+            for row in rows {
+                combo_key_events.push(row.map_err(|e| format!("读取组合键事件失败: {}", e))?);
+            }
+        }
+
         let export = serde_json::json!({
             "export_time": chrono::Local::now().to_rfc3339(),
             "key_events": key_events,
             "mouse_events": mouse_events,
             "sessions": sessions,
+            "combo_key_events": combo_key_events,
         });
 
         serde_json::to_string_pretty(&export).map_err(|e| format!("序列化导出数据失败: {}", e))
