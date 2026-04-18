@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+target/
+
+# Build output
+dist/
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Tauri
+src-tauri/icons/icon.icns
+src-tauri/WixTools/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+
+# Release binaries (use GitHub Releases instead)
+release/
