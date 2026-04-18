@@ -30,6 +30,15 @@ interface HourlyDistribution {
   click_count: number;
 }
 
+interface AppSettings {
+  is_recording: boolean;
+  auto_start: boolean;
+  minimize_to_tray: boolean;
+  language: string;
+  color_scheme: string;
+  keyboard_layout: string;
+}
+
 // 安全调用 Tauri invoke
 async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (typeof window !== 'undefined' && '__TAURI__' in window) {
@@ -47,22 +56,26 @@ async function invokeTauri<T>(command: string, args?: Record<string, unknown>): 
 // 动画数字组件
 function AnimatedNumber({ value, format }: { value: number; format: (n: number) => string }) {
   const [display, setDisplay] = useState(0);
+  const [prevValue, setPrevValue] = useState(0);
 
   useEffect(() => {
-    const duration = 1000;
+    // 只有当 value 真正变化时才动画
+    if (value === prevValue) return;
+
+    const duration = 800;
     const startTime = Date.now();
-    const startVal = 0;
+    const startVal = prevValue; // 从上一次的值开始
 
     function tick() {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // easeOutExpo
       const eased = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
       setDisplay(Math.floor(startVal + (value - startVal) * eased));
       if (progress < 1) requestAnimationFrame(tick);
     }
     tick();
-  }, [value]);
+    setPrevValue(value); // 更新上一次的值
+  }, [value, prevValue]);
 
   return <span style={{ fontFamily: 'var(--font-mono)' }}>{format(display)}</span>;
 }
@@ -172,7 +185,7 @@ function brightenColor(color: string): string {
 }
 
 // 键盘热力图
-function KeyboardHeatmap({ keyCounts }: { keyCounts: Record<string, number> }) {
+function KeyboardHeatmap({ keyCounts, colorScheme = 'neon' }: { keyCounts: Record<string, number>; colorScheme?: string }) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // 当前按下的键
   const maxCount = useMemo(
@@ -241,7 +254,7 @@ function KeyboardHeatmap({ keyCounts }: { keyCounts: Record<string, number> }) {
         >
           {keyLayout60.map((k) => {
             const count = keyCounts[k.key] || 0;
-            const color = getHeatColor(count, maxCount);
+            const color = getHeatColor(count, maxCount, colorScheme as any);
             const textColor = getContrastTextColor(color);
             const isHovered = hoveredKey === k.key;
             const isActive = activeKeys.has(k.key);
@@ -469,17 +482,31 @@ export default function Dashboard() {
   const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
   const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [colorScheme, setColorScheme] = useState('neon');
+
+  // 加载设置
+  useEffect(() => {
+    const loadSettings = async () => {
+      const settings = await invokeTauri<AppSettings>('get_app_settings');
+      if (settings) {
+        setColorScheme(settings.color_scheme || 'neon');
+      }
+    };
+    loadSettings();
+  }, []);
 
   const fetchData = async () => {
     try {
-      const [s, h, hr] = await Promise.all([
+      const [s, h, hr, settings] = await Promise.all([
         invokeTauri<OverallStats>('get_stats'),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: 'today' }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
+        invokeTauri<AppSettings>('get_app_settings'),
       ]);
       if (s) setStats(s);
       if (h) setHeatmapData(h);
       if (hr) setHourlyData(hr);
+      if (settings) setColorScheme(settings.color_scheme || 'neon');
     } catch (e) {
       console.error('获取数据失败:', e);
     } finally {
@@ -593,7 +620,7 @@ export default function Dashboard() {
       </div>
 
       {/* 键盘热力图 */}
-      <KeyboardHeatmap keyCounts={keyCounts} />
+      <KeyboardHeatmap keyCounts={keyCounts} colorScheme={colorScheme} />
 
       {/* 图表区域 */}
       <div className="grid-2" style={{ marginTop: 20 }}>

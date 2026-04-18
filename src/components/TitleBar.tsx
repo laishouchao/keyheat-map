@@ -7,7 +7,6 @@ const styles = {
     borderBottom: '1px solid var(--border-primary)',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
     position: 'relative' as const,
     flexShrink: 0,
     paddingLeft: 60, // sidebar width
@@ -78,11 +77,8 @@ export default function TitleBar() {
   }, []);
 
   return (
-    <div
-      style={styles.titlebar}
-      data-tauri-drag-region
-    >
-      {/* traffic lights 区域在 drag region 外部，确保点击不被吞掉 */}
+    <div style={styles.titlebar}>
+      {/* traffic lights 区域 - 不在 drag region 内 */}
       <div style={styles.trafficLights}>
         <button
           style={{
@@ -118,7 +114,12 @@ export default function TitleBar() {
           aria-label="最大化/还原窗口"
         />
       </div>
+
+      {/* 标题区域 - 可拖动 */}
       <span style={styles.title} data-tauri-drag-region>KeyHeat Map</span>
+
+      {/* 右侧留白区域 - 也可拖动 */}
+      <div style={{ flex: 1 }} data-tauri-drag-region />
     </div>
   );
 }

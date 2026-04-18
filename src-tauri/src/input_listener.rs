@@ -100,12 +100,13 @@ impl InputListener {
                 // 鼠标位置采样控制：每隔一定次数记录一次鼠标位置
                 let mut mouse_move_count: u64 = 0;
                 let mouse_position_sample_rate: u64 = 10; // 每10次鼠标移动记录一次位置
+                let mut last_mouse_position: Option<(i32, i32)> = None;
 
                 loop {
                     if !processor_listening.load(Ordering::SeqCst) {
                         // 处理剩余事件
                         while let Ok(event) = rx.try_recv() {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate) {
+                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position) {
                                 eprintln!("处理事件失败: {}", e);
                             }
                         }
@@ -114,7 +115,7 @@ impl InputListener {
 
                     match rx.recv_timeout(std::time::Duration::from_millis(100)) {
                         Ok(event) => {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate) {
+                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position) {
                                 eprintln!("处理事件失败: {}", e);
                             }
                         }
@@ -255,6 +256,7 @@ impl InputListener {
         session_id: &Arc<std::sync::Mutex<String>>,
         mouse_move_count: &mut u64,
         mouse_position_sample_rate: u64,
+        last_mouse_position: &mut Option<(i32, i32)>,
     ) -> Result<(), String> {
         let sid = session_id.lock().map_err(|e| e.to_string())?;
         let session_id_str = sid.clone();
@@ -282,6 +284,24 @@ impl InputListener {
                 timestamp,
             } => {
                 *mouse_move_count += 1;
+
+                // 计算移动距离
+                let move_distance = if let Some((last_x, last_y)) = *last_mouse_position {
+                    let dx = (*x - last_x) as f64;
+                    let dy = (*y - last_y) as f64;
+                    (dx * dx + dy * dy).sqrt()
+                } else {
+                    0.0
+                };
+
+                // 更新上一次位置
+                *last_mouse_position = Some((*x, *y));
+
+                // 累积到会话总距离
+                if move_distance > 0.0 {
+                    db.update_session_distance(&session_id_str, move_distance)?;
+                }
+
                 // 按采样率记录鼠标位置，避免数据库膨胀
                 if *mouse_move_count % mouse_position_sample_rate == 0 {
                     db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;

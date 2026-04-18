@@ -141,6 +141,8 @@ export default function SettingsPage() {
     setSettings(newSettings);
     try {
       await invokeTauri('save_app_settings', { settings: newSettings });
+      // 设置保存成功
+      console.log('设置已保存');
     } catch (e) {
       console.error('保存设置失败:', e);
     }
