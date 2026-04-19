@@ -89,13 +89,9 @@ fn main() {
                 .center()
                 .expect("窗口居中失败");
 
-            // 隐藏标题栏（使用自定义标题栏）
-            #[cfg(not(target_os = "macos"))]
-            {
-                main_window
-                    .set_decorations(false)
-                    .expect("隐藏标题栏失败");
-            }
+            // macOS 使用系统原生标题栏（自带红绿灯按钮）
+            // Windows/Linux 也使用系统原生标题栏（自带最小化/最大化/关闭按钮）
+            // 不再隐藏装饰，使用原生窗口控制
 
             // 如果设置了自动开始录制，则启动输入监听
             if auto_start_recording {
