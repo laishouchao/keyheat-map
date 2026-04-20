@@ -6,8 +6,8 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "keyheat-map",
-    "version": "0.5.0"
+    "productName": "键盘侠",
+    "version": "0.5.1"
   },
   "tauri": {
     "allowlist": {
@@ -64,7 +64,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "KeyHeat Map",
+        "title": "键盘侠 - KeyHeat Map",
         "width": 1100,
         "height": 750,
         "minWidth": 960,

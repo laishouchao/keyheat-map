@@ -393,6 +393,7 @@ impl InputListener {
 fn normalize_key_name(key: &rdev::Key) -> String {
     let raw = format!("{:?}", key);
     match raw.as_str() {
+        // 数字键：rdev 用 Num0-9，前端用 Digit0-9
         "Num0" => "Digit0".to_string(),
         "Num1" => "Digit1".to_string(),
         "Num2" => "Digit2".to_string(),
@@ -403,28 +404,66 @@ fn normalize_key_name(key: &rdev::Key) -> String {
         "Num7" => "Digit7".to_string(),
         "Num8" => "Digit8".to_string(),
         "Num9" => "Digit9".to_string(),
+        // 特殊键
         "Return" => "Enter".to_string(),
+        "Backspace" => "Backspace".to_string(),
+        "Delete" => "Delete".to_string(),
+        "Insert" => "Insert".to_string(),
+        "Home" => "Home".to_string(),
+        "End" => "End".to_string(),
+        "PageUp" => "PageUp".to_string(),
+        "PageDown" => "PageDown".to_string(),
+        "PrintScreen" => "PrintScreen".to_string(),
+        "ScrollLock" => "ScrollLock".to_string(),
+        "Pause" => "Pause".to_string(),
+        "NumLock" => "NumLock".to_string(),
+        "CapsLock" => "CapsLock".to_string(),
+        "Space" => "Space".to_string(),
+        "Tab" => "Tab".to_string(),
+        "Escape" => "Escape".to_string(),
+        // Alt 键
         "Alt" => "AltLeft".to_string(),
         "AltGr" => "AltRight".to_string(),
+        // 符号键：rdev 用不同名称
         "BackQuote" => "Backquote".to_string(),
         "BackSlash" => "Backslash".to_string(),
+        "IntlBackslash" => "Backslash".to_string(),
         "LeftBracket" => "BracketLeft".to_string(),
         "RightBracket" => "BracketRight".to_string(),
-        "Semicolon" => "Semicolon".to_string(),
+        "SemiColon" => "Semicolon".to_string(),
         "Quote" => "Quote".to_string(),
         "Comma" => "Comma".to_string(),
-        "Period" => "Period".to_string(),
+        "Dot" => "Period".to_string(),
         "Slash" => "Slash".to_string(),
         "Minus" => "Minus".to_string(),
         "Equal" => "Equal".to_string(),
-        "CapsLock" => "CapsLock".to_string(),
+        // Meta / Win 键
         "MetaLeft" => "MetaLeft".to_string(),
         "MetaRight" => "MetaRight".to_string(),
         "ContextMenu" => "ContextMenu".to_string(),
+        // 方向键
         "UpArrow" => "ArrowUp".to_string(),
         "DownArrow" => "ArrowDown".to_string(),
         "LeftArrow" => "ArrowLeft".to_string(),
         "RightArrow" => "ArrowRight".to_string(),
+        // 数字小键盘：rdev 用 KpX，前端用 NumpadX
+        "Kp0" => "Numpad0".to_string(),
+        "Kp1" => "Numpad1".to_string(),
+        "Kp2" => "Numpad2".to_string(),
+        "Kp3" => "Numpad3".to_string(),
+        "Kp4" => "Numpad4".to_string(),
+        "Kp5" => "Numpad5".to_string(),
+        "Kp6" => "Numpad6".to_string(),
+        "Kp7" => "Numpad7".to_string(),
+        "Kp8" => "Numpad8".to_string(),
+        "Kp9" => "Numpad9".to_string(),
+        "KpDelete" => "NumpadDecimal".to_string(),
+        "KpReturn" => "NumpadEnter".to_string(),
+        "KpMinus" => "NumpadSubtract".to_string(),
+        "KpPlus" => "NumpadAdd".to_string(),
+        "KpMultiply" => "NumpadMultiply".to_string(),
+        "KpDivide" => "NumpadDivide".to_string(),
+        // 其他：直接使用 Debug 名称（适用于 KeyA-KeyZ, ShiftLeft/Right, ControlLeft/Right, F1-F12 等）
         _ => raw,
     }
 }

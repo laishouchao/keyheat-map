@@ -72,7 +72,7 @@ fn main() {
 
             // 设置窗口标题
             main_window
-                .set_title("KeyHeat Map")
+                .set_title("键盘侠 - KeyHeat Map")
                 .expect("设置窗口标题失败");
 
             // 设置窗口大小
