@@ -9,18 +9,21 @@ export function formatNumber(num: number): string {
 }
 
 /**
- * 距离格式化（像素 -> 米 -> 公里）
- * 假设 96 DPI，1 英寸 = 2.54cm
+ * 距离格式化（像素 -> 厘米 -> 米 -> 公里）
+ * 假设 96 DPI，1 英寸 = 2.54cm，1px = 2.54/96 cm ≈ 0.0265cm
  */
 export function formatDistance(pixels: number): string {
-  const meters = pixels * 0.026458333; // 1px ≈ 0.026458333m (96 DPI)
-  if (meters >= 1000) {
-    return (meters / 1000).toFixed(2) + ' km';
+  const cm = pixels * 0.026458333; // 1px ≈ 0.0265cm (96 DPI)
+  if (cm >= 100000) {
+    return (cm / 100000).toFixed(2) + ' km';
   }
-  if (meters >= 1) {
-    return meters.toFixed(1) + ' m';
+  if (cm >= 100) {
+    return (cm / 100).toFixed(1) + ' m';
   }
-  return Math.round(meters * 100) + ' cm';
+  if (cm >= 1) {
+    return cm.toFixed(1) + ' cm';
+  }
+  return Math.round(cm * 10) + ' mm';
 }
 
 /**

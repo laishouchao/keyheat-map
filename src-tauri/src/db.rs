@@ -68,7 +68,8 @@ pub struct DailyStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HourlyDistribution {
     pub hour: i32,
-    pub count: i64,
+    pub key_count: i64,
+    pub click_count: i64,
 }
 
 /// 总体统计
@@ -664,29 +665,22 @@ impl Database {
                     UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
                 ),
                 key_counts AS (
-                    SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as count
+                    SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as cnt
                     FROM key_events
                     WHERE date(timestamp) = date('now', 'localtime')
                     GROUP BY hour
                 ),
                 click_counts AS (
-                    SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as count
+                    SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as cnt
                     FROM mouse_events
                     WHERE event_type = 'click'
                       AND date(timestamp) = date('now', 'localtime')
                     GROUP BY hour
-                ),
-                combined AS (
-                    SELECT hour, SUM(count) as count FROM (
-                        SELECT hour, count FROM key_counts
-                        UNION ALL
-                        SELECT hour, count FROM click_counts
-                    )
-                    GROUP BY hour
                 )
-                SELECT h.hour, COALESCE(c.count, 0) as count
+                SELECT h.hour, COALESCE(kc.cnt, 0) as key_count, COALESCE(cc.cnt, 0) as click_count
                 FROM all_hours h
-                LEFT JOIN combined c ON h.hour = c.hour
+                LEFT JOIN key_counts kc ON h.hour = kc.hour
+                LEFT JOIN click_counts cc ON h.hour = cc.hour
                 ORDER BY h.hour ASC",
             )
             .map_err(|e| format!("查询小时分布失败: {}", e))?;
@@ -695,7 +689,8 @@ impl Database {
             .query_map([], |row| {
                 Ok(HourlyDistribution {
                     hour: row.get(0)?,
-                    count: row.get(1)?,
+                    key_count: row.get(1)?,
+                    click_count: row.get(2)?,
                 })
             })
             .map_err(|e| format!("映射小时分布失败: {}", e))?

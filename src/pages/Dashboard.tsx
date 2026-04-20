@@ -26,7 +26,8 @@ interface KeyCount {
 
 interface HourlyDistribution {
   hour: number;
-  count: number;
+  key_count: number;
+  click_count: number;
 }
 
 interface AppSettings {
@@ -320,8 +321,8 @@ function KeyboardHeatmap({ keyCounts, colorScheme = 'neon', layout = '60%' }: { 
   );
 }
 
-// 今日活跃度迷你图表
-function HourlyChart({ data }: { data: { hour: string; 操作数: number }[] }) {
+// 今日活跃度迷你图表（键盘 + 鼠标双线）
+function HourlyChart({ data }: { data: { hour: string; 键盘: number; 鼠标: number }[] }) {
   return (
     <motion.div
       className="card"
@@ -329,7 +330,13 @@ function HourlyChart({ data }: { data: { hour: string; 操作数: number }[] }) 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
     >
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>今日活跃度</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>今日活跃度</h3>
+        <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+          <span style={{ color: '#00f5d4' }}>● 键盘</span>
+          <span style={{ color: '#f72585' }}>● 鼠标</span>
+        </div>
+      </div>
       <ResponsiveContainer width="100%" height={160}>
         <AreaChart data={data}>
           <defs>
@@ -337,13 +344,17 @@ function HourlyChart({ data }: { data: { hour: string; 操作数: number }[] }) 
               <stop offset="5%" stopColor="#00f5d4" stopOpacity={0.3} />
               <stop offset="95%" stopColor="#00f5d4" stopOpacity={0} />
             </linearGradient>
+            <linearGradient id="colorClicks" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f72585" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#f72585" stopOpacity={0} />
+            </linearGradient>
           </defs>
           <XAxis
             dataKey="hour"
             tick={{ fontSize: 10, fill: '#55556a' }}
             axisLine={{ stroke: '#1e1e2e' }}
             tickLine={false}
-            interval={3}
+            interval={2}
           />
           <YAxis hide />
           <Tooltip
@@ -355,14 +366,20 @@ function HourlyChart({ data }: { data: { hour: string; 操作数: number }[] }) 
               color: '#e8e8f0',
             }}
             labelStyle={{ color: '#8888a0' }}
-            formatter={(value: number) => [formatNumber(value), '操作数']}
           />
           <Area
             type="monotone"
-            dataKey="操作数"
+            dataKey="键盘"
             stroke="#00f5d4"
             strokeWidth={2}
             fill="url(#colorKeys)"
+          />
+          <Area
+            type="monotone"
+            dataKey="鼠标"
+            stroke="#f72585"
+            strokeWidth={2}
+            fill="url(#colorClicks)"
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -516,21 +533,18 @@ export default function Dashboard() {
     return map;
   }, [heatmapData]);
 
-  // 将 HourlyDistribution 转换为图表数据
+  // 将 HourlyDistribution 转换为图表数据（只显示到当前小时）
   const hourlyChartData = useMemo(() => {
-    // 确保有完整的24小时数据
-    const fullData = Array.from({ length: 24 }, (_, i) => ({
-      hour: `${String(i).padStart(2, '0')}:00`,
-      操作数: 0,
-    }));
-    hourlyData.forEach(h => {
-      if (h.hour >= 0 && h.hour < 24) {
-        fullData[h.hour] = {
-          hour: `${String(h.hour).padStart(2, '0')}:00`,
-          操作数: h.count,
-        };
-      }
-    });
+    const currentHour = new Date().getHours();
+    const fullData: { hour: string; 键盘: number; 鼠标: number }[] = [];
+    for (let i = 0; i <= currentHour; i++) {
+      const entry = hourlyData.find(h => h.hour === i);
+      fullData.push({
+        hour: `${String(i).padStart(2, '0')}:00`,
+        键盘: entry?.key_count || 0,
+        鼠标: entry?.click_count || 0,
+      });
+    }
     return fullData;
   }, [hourlyData]);
 

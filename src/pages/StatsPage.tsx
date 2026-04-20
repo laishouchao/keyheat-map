@@ -25,7 +25,8 @@ interface DailyStats {
 
 interface HourlyDistribution {
   hour: number;
-  count: number;
+  key_count: number;
+  click_count: number;
 }
 
 // 安全调用 Tauri invoke
@@ -129,7 +130,7 @@ export default function StatsPage() {
         const entry = hourlyData.find(h => h.hour === hi);
         // 模拟按天分配：当天数据完整，其他天递减
         const dayFactor = di === 0 ? 1 : Math.max(0.3, 1 - di * 0.1);
-        return Math.floor((entry?.count || 0) * dayFactor);
+        return Math.floor(((entry?.key_count || 0) + (entry?.click_count || 0)) * dayFactor);
       }),
     }));
   }, [hourlyData]);
