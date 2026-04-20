@@ -389,7 +389,7 @@ impl InputListener {
     }
 }
 
-/// 将 rdev 的 key 名称统一映射为标准格式
+/// 将 rdev 的 key 名称统一映射为标准格式（与前端 keyLayout.ts 保持一致）
 fn normalize_key_name(key: &rdev::Key) -> String {
     let raw = format!("{:?}", key);
     match raw.as_str() {
@@ -408,6 +408,23 @@ fn normalize_key_name(key: &rdev::Key) -> String {
         "AltGr" => "AltRight".to_string(),
         "BackQuote" => "Backquote".to_string(),
         "BackSlash" => "Backslash".to_string(),
+        "LeftBracket" => "BracketLeft".to_string(),
+        "RightBracket" => "BracketRight".to_string(),
+        "Semicolon" => "Semicolon".to_string(),
+        "Quote" => "Quote".to_string(),
+        "Comma" => "Comma".to_string(),
+        "Period" => "Period".to_string(),
+        "Slash" => "Slash".to_string(),
+        "Minus" => "Minus".to_string(),
+        "Equal" => "Equal".to_string(),
+        "CapsLock" => "CapsLock".to_string(),
+        "MetaLeft" => "MetaLeft".to_string(),
+        "MetaRight" => "MetaRight".to_string(),
+        "ContextMenu" => "ContextMenu".to_string(),
+        "UpArrow" => "ArrowUp".to_string(),
+        "DownArrow" => "ArrowDown".to_string(),
+        "LeftArrow" => "ArrowLeft".to_string(),
+        "RightArrow" => "ArrowRight".to_string(),
         _ => raw,
     }
 }

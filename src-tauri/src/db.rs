@@ -493,26 +493,26 @@ impl Database {
                 "WITH key_daily AS (
                     SELECT date(timestamp) as d, COUNT(*) as kc
                     FROM key_events
-                    WHERE date(timestamp) >= date('now', 'localtime', ?1 || ' days')
+                    WHERE date(timestamp) >= date('now', 'localtime', '-' || ?1 || ' days')
                     GROUP BY d
                 ),
                 click_daily AS (
                     SELECT date(timestamp) as d, COUNT(*) as cc
                     FROM mouse_events
                     WHERE event_type = 'click'
-                      AND date(timestamp) >= date('now', 'localtime', ?1 || ' days')
+                      AND date(timestamp) >= date('now', 'localtime', '-' || ?1 || ' days')
                     GROUP BY d
                 ),
                 dist_daily AS (
                     SELECT date(start_time) as d, COALESCE(SUM(total_distance), 0.0) as td
                     FROM sessions
-                    WHERE date(start_time) >= date('now', 'localtime', ?1 || ' days')
+                    WHERE date(start_time) >= date('now', 'localtime', '-' || ?1 || ' days')
                     GROUP BY d
                 ),
                 active_daily AS (
                     SELECT date(timestamp) as d, COUNT(DISTINCT strftime('%Y-%m-%d %H:%M', timestamp)) as am
                     FROM key_events
-                    WHERE date(timestamp) >= date('now', 'localtime', ?1 || ' days')
+                    WHERE date(timestamp) >= date('now', 'localtime', '-' || ?1 || ' days')
                     GROUP BY d
                 )
                 SELECT
@@ -522,10 +522,10 @@ impl Database {
                     COALESCE(dd.td, 0.0) as total_distance,
                     COALESCE(ad.am, 0) as active_minutes
                 FROM (
-                    SELECT DISTINCT date('now', 'localtime', (n - ?1) || ' days') as d
+                    SELECT DISTINCT date('now', 'localtime', '-' || n || ' days') as d
                     FROM (
                         WITH RECURSIVE cnt(x) AS (
-                            SELECT 1 UNION ALL SELECT x+1 FROM cnt WHERE x < ?1
+                            SELECT 0 UNION ALL SELECT x+1 FROM cnt WHERE x < ?1
                         ) SELECT x as n FROM cnt
                     )
                 ) dates
