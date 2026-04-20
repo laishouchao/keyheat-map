@@ -161,6 +161,9 @@ export default function SettingsPage() {
     language: 'zh',
     color_scheme: 'neon',
     keyboard_layout: '60%',
+    show_tray_icon: true,
+    ignore_mouse_move: false,
+    mouse_move_threshold: 5,
   });
   const [loading, setLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
