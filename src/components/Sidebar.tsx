@@ -92,7 +92,7 @@ export default function Sidebar() {
         // 比较版本号
         const currentParts = appVersion.split('.').map(Number);
         const latestParts = latest.split('.').map(Number);
-        const isNewer = latestParts.some((v, i) => v > (currentParts[i] || 0));
+        const isNewer = latestParts.some((v: number, i: number) => v > (currentParts[i] || 0));
         setHasUpdate(isNewer);
       } catch {
         // 静默失败
