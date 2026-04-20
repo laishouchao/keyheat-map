@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - 'main'
 
 jobs:
   release:
@@ -47,6 +47,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Pre-cache WiX (Windows only)
         if: matrix.platform == 'windows-latest'
         run: |
@@ -61,10 +65,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "KeyHeat Map ${{ github.ref_name }}"
+          tagName: v${{ steps.version.outputs.version }}
+          releaseName: "KeyHeat Map v${{ steps.version.outputs.version }}"
           releaseBody: |
-            ## 🔥 KeyHeat Map ${{ github.ref_name }}
+            ## 🔥 KeyHeat Map v${{ steps.version.outputs.version }}
 
             跨平台键盘/鼠标热力图桌面应用
 
