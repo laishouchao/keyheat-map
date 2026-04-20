@@ -6,7 +6,38 @@ on:
       - 'main'
 
 jobs:
+  # 第一步：清理旧的 tag/release，确保构建不会冲突
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Cleanup existing tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          echo "清理已存在的 tag/release: $TAG"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          echo "清理完成"
+
+  # 第二步：三平台并行构建
   release:
+    needs: prepare
     permissions:
       contents: write
     strategy:
@@ -47,10 +78,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Read version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
       - name: Pre-cache WiX (Windows only)
         if: matrix.platform == 'windows-latest'
         run: |
@@ -65,10 +92,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v${{ steps.version.outputs.version }}
-          releaseName: "KeyHeat Map v${{ steps.version.outputs.version }}"
+          tagName: v${{ needs.prepare.outputs.version }}
+          releaseName: "KeyHeat Map v${{ needs.prepare.outputs.version }}"
           releaseBody: |
-            ## 🔥 KeyHeat Map v${{ steps.version.outputs.version }}
+            ## 🔥 KeyHeat Map v${{ needs.prepare.outputs.version }}
 
             跨平台键盘/鼠标热力图桌面应用
 
