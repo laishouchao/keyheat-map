@@ -26,8 +26,7 @@ interface KeyCount {
 
 interface HourlyDistribution {
   hour: number;
-  key_count: number;
-  click_count: number;
+  count: number;
 }
 
 interface AppSettings {
@@ -528,7 +527,7 @@ export default function Dashboard() {
       if (h.hour >= 0 && h.hour < 24) {
         fullData[h.hour] = {
           hour: `${String(h.hour).padStart(2, '0')}:00`,
-          按键数: h.key_count,
+          按键数: h.count,
         };
       }
     });
