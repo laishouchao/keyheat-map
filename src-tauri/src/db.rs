@@ -639,14 +639,30 @@ impl Database {
                     UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19
                     UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
                 ),
-                hour_counts AS (
+                key_counts AS (
                     SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as count
                     FROM key_events
+                    WHERE date(timestamp) = date('now', 'localtime')
+                    GROUP BY hour
+                ),
+                click_counts AS (
+                    SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as count
+                    FROM mouse_events
+                    WHERE event_type = 'click'
+                      AND date(timestamp) = date('now', 'localtime')
+                    GROUP BY hour
+                ),
+                combined AS (
+                    SELECT hour, SUM(count) as count FROM (
+                        SELECT hour, count FROM key_counts
+                        UNION ALL
+                        SELECT hour, count FROM click_counts
+                    )
                     GROUP BY hour
                 )
-                SELECT h.hour, COALESCE(hc.count, 0) as count
+                SELECT h.hour, COALESCE(c.count, 0) as count
                 FROM all_hours h
-                LEFT JOIN hour_counts hc ON h.hour = hc.hour
+                LEFT JOIN combined c ON h.hour = c.hour
                 ORDER BY h.hour ASC",
             )
             .map_err(|e| format!("查询小时分布失败: {}", e))?;

@@ -320,8 +320,8 @@ function KeyboardHeatmap({ keyCounts, colorScheme = 'neon', layout = '60%' }: { 
   );
 }
 
-// 24小时活跃度迷你图表
-function HourlyChart({ data }: { data: { hour: string; 按键数: number }[] }) {
+// 今日活跃度迷你图表
+function HourlyChart({ data }: { data: { hour: string; 操作数: number }[] }) {
   return (
     <motion.div
       className="card"
@@ -329,7 +329,7 @@ function HourlyChart({ data }: { data: { hour: string; 按键数: number }[] }) 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
     >
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>24小时活跃度</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>今日活跃度</h3>
       <ResponsiveContainer width="100%" height={160}>
         <AreaChart data={data}>
           <defs>
@@ -355,11 +355,11 @@ function HourlyChart({ data }: { data: { hour: string; 按键数: number }[] }) 
               color: '#e8e8f0',
             }}
             labelStyle={{ color: '#8888a0' }}
-            formatter={(value: number) => [formatNumber(value), '按键数']}
+            formatter={(value: number) => [formatNumber(value), '操作数']}
           />
           <Area
             type="monotone"
-            dataKey="按键数"
+            dataKey="操作数"
             stroke="#00f5d4"
             strokeWidth={2}
             fill="url(#colorKeys)"
@@ -521,13 +521,13 @@ export default function Dashboard() {
     // 确保有完整的24小时数据
     const fullData = Array.from({ length: 24 }, (_, i) => ({
       hour: `${String(i).padStart(2, '0')}:00`,
-      按键数: 0,
+      操作数: 0,
     }));
     hourlyData.forEach(h => {
       if (h.hour >= 0 && h.hour < 24) {
         fullData[h.hour] = {
           hour: `${String(h.hour).padStart(2, '0')}:00`,
-          按键数: h.count,
+          操作数: h.count,
         };
       }
     });
