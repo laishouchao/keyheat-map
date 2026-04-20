@@ -320,14 +320,16 @@ impl InputListener {
                 // 更新上一次位置
                 *last_mouse_position = Some((*x, *y));
 
-                // 累积到会话总距离
+                // 累积到会话总距离（忽略错误，不影响位置记录）
                 if move_distance > 0.0 {
-                    db.update_session_distance(&session_id_str, move_distance)?;
+                    let _ = db.update_session_distance(&session_id_str, move_distance);
                 }
 
                 // 按采样率记录鼠标位置，避免数据库膨胀
                 if *mouse_move_count % mouse_position_sample_rate == 0 {
-                    db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
+                    if let Err(e) = db.insert_mouse_position(*x, *y, timestamp, &session_id_str) {
+                        eprintln!("记录鼠标位置失败: {}", e);
+                    }
                 }
 
                 // MouseMove 事件太频繁，每 10 次才推送一次

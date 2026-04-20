@@ -448,15 +448,15 @@ export default function StatsPage() {
       )}
 
       {/* 鼠标移动轨迹图（最近1小时） */}
-      {mouseTrajectory.length > 0 && (
-        <motion.div
-          className="card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          style={{ marginBottom: 20 }}
-        >
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动轨迹（最近1小时）</h3>
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+        style={{ marginBottom: 20 }}
+      >
+        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动轨迹（最近1小时）</h3>
+        {mouseTrajectory.length > 0 ? (
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <canvas
               ref={(canvas) => {
@@ -476,8 +476,6 @@ export default function StatsPage() {
                 // 背景
                 ctx.fillStyle = '#0d0d1a';
                 ctx.fillRect(0, 0, displayWidth, displayHeight);
-
-                if (mouseTrajectory.length === 0) return;
 
                 // 找到坐标范围
                 const xs = mouseTrajectory.map(p => p.x);
@@ -513,13 +511,11 @@ export default function StatsPage() {
 
                 // 绘制起点和终点
                 if (points.length > 0) {
-                  // 起点 - 绿色
                   ctx.beginPath();
                   ctx.arc(points[0].x, points[0].y, 4, 0, Math.PI * 2);
                   ctx.fillStyle = '#00f5d4';
                   ctx.fill();
 
-                  // 终点 - 粉色
                   ctx.beginPath();
                   ctx.arc(points[len - 1].x, points[len - 1].y, 4, 0, Math.PI * 2);
                   ctx.fillStyle = '#f72585';
@@ -539,8 +535,12 @@ export default function StatsPage() {
               }}
             />
           </div>
-        </motion.div>
-      )}
+        ) : (
+          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            暂无鼠标轨迹数据，移动鼠标后刷新查看
+          </div>
+        )}
+      </motion.div>
 
       {/* 详细统计表格 */}
       {tableData.length > 0 && (
