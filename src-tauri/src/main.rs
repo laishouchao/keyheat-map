@@ -75,15 +75,8 @@ fn main() {
                 .set_title("键盘侠 - KeyHeat Map")
                 .expect("设置窗口标题失败");
 
-            // 设置窗口大小
-            main_window
-                .set_size(tauri::Size::Physical(tauri::PhysicalSize::new(1100, 750)))
-                .expect("设置窗口大小失败");
-
-            // 设置最小窗口尺寸
-            main_window
-                .set_min_size(Some(tauri::Size::Physical(tauri::PhysicalSize::new(960, 640))))
-                .expect("设置最小窗口尺寸失败");
+            // 窗口大小由 tauri.conf.json 统一管理，不再在代码中重复设置
+            // 避免与 tauri.conf.json 中的 LogicalSize 冲突导致窗口变小
 
             // 窗口居中显示
             main_window

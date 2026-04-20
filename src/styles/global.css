@@ -391,6 +391,27 @@ code, pre, .font-mono {
   gap: 16px;
 }
 
+/* 响应式布局：窗口较小时减少列数 */
+@media (max-width: 1024px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .grid-4,
+  .grid-3,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .page-container {
+    padding: 16px;
+  }
+}
+
 /* flex 工具 */
 .flex-center {
   display: flex;
