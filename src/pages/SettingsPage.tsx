@@ -114,6 +114,41 @@ function SettingSection({
   );
 }
 
+// Toast 提示组件
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 20,
+        right: 20,
+        zIndex: 10000,
+        padding: '10px 20px',
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 500,
+        fontFamily: 'var(--font-ui)',
+        color: '#fff',
+        background: type === 'success' ? 'rgba(0, 200, 150, 0.9)' : 'rgba(247, 37, 133, 0.9)',
+        backdropFilter: 'blur(8px)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        animation: 'fadeIn 0.3s ease',
+      }}
+    >
+      <span>{type === 'success' ? '✓' : '✗'}</span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>({
     is_recording: true,
@@ -127,6 +162,7 @@ export default function SettingsPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // 页面加载时获取设置
   useEffect(() => {
@@ -142,10 +178,18 @@ export default function SettingsPage() {
     setSettings(newSettings);
     try {
       await invokeTauri('save_app_settings', { settings: newSettings });
-      // 设置保存成功
-      console.log('设置已保存');
+      // 通知其他页面设置已变更
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        import('@tauri-apps/api/event').then(({ emit }) => {
+          emit('settings-changed', {});
+        }).catch(() => {});
+      }
+      setToast({ message: '设置已保存', type: 'success' });
     } catch (e) {
       console.error('保存设置失败:', e);
+      setToast({ message: `保存失败: ${e}`, type: 'error' });
+      // 回滚到旧设置
+      setSettings(settings);
     }
   }, [settings]);
 
@@ -217,6 +261,7 @@ export default function SettingsPage() {
 
   return (
     <div className="page-container">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h2 className="page-title">设置</h2>
 
       {/* 基本设置 */}
@@ -435,11 +480,11 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>版本</span>
-            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>v0.1.0</span>
+            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>v0.4.0</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>构建</span>
-            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>2024.12.01</span>
+            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>2026.04.20</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>GitHub</span>

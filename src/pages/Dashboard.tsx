@@ -486,11 +486,17 @@ export default function Dashboard() {
     fetchData();
 
     let unlisten: (() => void) | null = null;
+    let unlistenSettings: (() => void) | null = null;
     if (typeof window !== 'undefined' && '__TAURI__' in window) {
       import('@tauri-apps/api/event').then(({ listen }) => {
         listen<string>('input-event', () => {
           fetchData();
         }).then(fn => { unlisten = fn; }).catch(() => {});
+      }).catch(() => {});
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen('settings-changed', () => {
+          fetchData();
+        }).then(fn => { unlistenSettings = fn; }).catch(() => {});
       }).catch(() => {});
     }
 
@@ -498,6 +504,7 @@ export default function Dashboard() {
     return () => {
       clearInterval(timer);
       if (unlisten) unlisten();
+      if (unlistenSettings) unlistenSettings();
     };
   }, []);
 

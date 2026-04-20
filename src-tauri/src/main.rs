@@ -27,6 +27,7 @@ fn main() {
             commands::get_daily_stats,
             commands::get_top_keys,
             commands::get_mouse_heatmap_data,
+            commands::get_mouse_trajectory,
             commands::get_hourly_distribution,
             commands::get_session_history,
             commands::clear_all_data,

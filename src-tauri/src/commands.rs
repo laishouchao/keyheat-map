@@ -30,7 +30,7 @@ pub fn get_daily_stats(
     state: tauri::State<AppState>,
     days: i32,
 ) -> Result<Vec<DailyStats>, String> {
-    let days = days.clamp(1, 365);
+    let days = days.clamp(0, 365);
     state.db.get_daily_stats(days)
 }
 
@@ -47,6 +47,14 @@ pub fn get_mouse_heatmap_data(
     state: tauri::State<AppState>,
 ) -> Result<Vec<(i32, i32, i64)>, String> {
     state.db.get_mouse_heatmap_data()
+}
+
+/// 获取鼠标移动轨迹数据（最近1小时）
+#[tauri::command]
+pub fn get_mouse_trajectory(
+    state: tauri::State<AppState>,
+) -> Result<Vec<(i32, i32, String)>, String> {
+    state.db.get_mouse_trajectory()
 }
 
 /// 获取24小时按键分布

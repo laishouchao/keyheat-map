@@ -60,7 +60,7 @@ export default function StatsPage() {
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
   const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
-  const [mouseHeatmap, setMouseHeatmap] = useState<number[][]>([]);
+  const [mouseTrajectory, setMouseTrajectory] = useState<{x: number; y: number; timestamp: string}[]>([]);
   const [comboStats, setComboStats] = useState<{combo_name: string; count: number}[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,17 +75,17 @@ export default function StatsPage() {
       };
 
       const [ds, hd, hr, mh, cs] = await Promise.all([
-        invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 1 }),
+        invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 0 }),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
-        invokeTauri<number[][]>('get_mouse_heatmap_data'),
+        invokeTauri<{x: number; y: number; timestamp: string}[]>('get_mouse_trajectory'),
         invokeTauri<{combo_name: string; count: number}[]>('get_combo_stats', { period: periodMap[period] }),
       ]);
 
       if (ds) setDailyStats(ds);
       if (hd) setHeatmapData(hd);
       if (hr) setHourlyData(hr);
-      if (mh) setMouseHeatmap(mh);
+      if (mh) setMouseTrajectory(mh);
       if (cs) setComboStats(cs);
     } catch (e) {
       console.error('获取统计数据失败:', e);
@@ -170,11 +170,6 @@ export default function StatsPage() {
   const maxHourly = useMemo(
     () => Math.max(...hourlyHeatmap.flatMap((d) => d.hours), 1),
     [hourlyHeatmap]
-  );
-
-  const maxMouse = useMemo(
-    () => Math.max(...(mouseHeatmap.length > 0 ? mouseHeatmap.flat() : [0]), 1),
-    [mouseHeatmap]
   );
 
   if (loading) {
@@ -272,7 +267,7 @@ export default function StatsPage() {
         </ResponsiveContainer>
       </motion.div>
 
-      <div className="grid-2" style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 20 }}>
         {/* 按键分布饼图 */}
         <motion.div
           className="card"
@@ -452,8 +447,8 @@ export default function StatsPage() {
         </motion.div>
       )}
 
-      {/* 鼠标移动热力图 */}
-      {mouseHeatmap.length > 0 && (
+      {/* 鼠标移动轨迹图（最近1小时） */}
+      {mouseTrajectory.length > 0 && (
         <motion.div
           className="card"
           initial={{ opacity: 0, y: 20 }}
@@ -461,37 +456,88 @@ export default function StatsPage() {
           transition={{ duration: 0.4, delay: 0.2 }}
           style={{ marginBottom: 20 }}
         >
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动热力图</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>鼠标移动轨迹（最近1小时）</h3>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${mouseHeatmap[0]?.length || 10}, 1fr)`,
-                gap: 3,
-                width: 320,
-                height: 320,
-                background: 'var(--bg-primary)',
-                borderRadius: 8,
-                padding: 8,
+            <canvas
+              ref={(canvas) => {
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+
+                const dpr = window.devicePixelRatio || 1;
+                const displayWidth = 560;
+                const displayHeight = 360;
+                canvas.width = displayWidth * dpr;
+                canvas.height = displayHeight * dpr;
+                canvas.style.width = `${displayWidth}px`;
+                canvas.style.height = `${displayHeight}px`;
+                ctx.scale(dpr, dpr);
+
+                // 背景
+                ctx.fillStyle = '#0d0d1a';
+                ctx.fillRect(0, 0, displayWidth, displayHeight);
+
+                if (mouseTrajectory.length === 0) return;
+
+                // 找到坐标范围
+                const xs = mouseTrajectory.map(p => p.x);
+                const ys = mouseTrajectory.map(p => p.y);
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+                const rangeX = Math.max(maxX - minX, 1);
+                const rangeY = Math.max(maxY - minY, 1);
+
+                const padding = 20;
+                const drawWidth = displayWidth - padding * 2;
+                const drawHeight = displayHeight - padding * 2;
+
+                // 归一化坐标到画布
+                const points = mouseTrajectory.map(p => ({
+                  x: padding + ((p.x - minX) / rangeX) * drawWidth,
+                  y: padding + ((p.y - minY) / rangeY) * drawHeight,
+                }));
+
+                // 绘制轨迹线
+                const len = points.length;
+                for (let i = 1; i < len; i++) {
+                  const alpha = 0.15 + (i / len) * 0.85;
+                  ctx.beginPath();
+                  ctx.moveTo(points[i - 1].x, points[i - 1].y);
+                  ctx.lineTo(points[i].x, points[i].y);
+                  ctx.strokeStyle = `rgba(247, 37, 133, ${alpha})`;
+                  ctx.lineWidth = 1.5;
+                  ctx.stroke();
+                }
+
+                // 绘制起点和终点
+                if (points.length > 0) {
+                  // 起点 - 绿色
+                  ctx.beginPath();
+                  ctx.arc(points[0].x, points[0].y, 4, 0, Math.PI * 2);
+                  ctx.fillStyle = '#00f5d4';
+                  ctx.fill();
+
+                  // 终点 - 粉色
+                  ctx.beginPath();
+                  ctx.arc(points[len - 1].x, points[len - 1].y, 4, 0, Math.PI * 2);
+                  ctx.fillStyle = '#f72585';
+                  ctx.fill();
+                }
+
+                // 图例
+                ctx.font = '11px sans-serif';
+                ctx.fillStyle = '#00f5d4';
+                ctx.fillText('● 起点', displayWidth - 80, 20);
+                ctx.fillStyle = '#f72585';
+                ctx.fillText('● 终点', displayWidth - 80, 36);
               }}
-            >
-              {mouseHeatmap.flat().map((val, i) => {
-                const intensity = val / maxMouse;
-                const bg = val === 0
-                  ? '#1a1a2e'
-                  : `rgba(247, 37, 133, ${Math.max(0.1, intensity)})`;
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      borderRadius: 3,
-                      background: bg,
-                      transition: 'all 0.15s ease',
-                    }}
-                  />
-                );
-              })}
-            </div>
+              style={{
+                borderRadius: 8,
+                border: '1px solid var(--border-primary)',
+              }}
+            />
           </div>
         </motion.div>
       )}

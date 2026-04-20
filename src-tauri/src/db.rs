@@ -84,6 +84,7 @@ pub struct OverallStats {
 
 /// 应用设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppSettings {
     pub is_recording: bool,
     pub auto_start: bool,
@@ -92,6 +93,10 @@ pub struct AppSettings {
     pub language: String,
     pub ignore_mouse_move: bool,
     pub mouse_move_threshold: i32,
+    // 前端需要的额外字段
+    pub color_scheme: String,
+    pub keyboard_layout: String,
+    pub minimize_to_tray: bool,
 }
 
 impl Default for AppSettings {
@@ -104,6 +109,9 @@ impl Default for AppSettings {
             language: "zh-CN".to_string(),
             ignore_mouse_move: false,
             mouse_move_threshold: 5,
+            color_scheme: "neon".to_string(),
+            keyboard_layout: "60%".to_string(),
+            minimize_to_tray: true,
         }
     }
 }
@@ -485,26 +493,26 @@ impl Database {
                 "WITH key_daily AS (
                     SELECT date(timestamp) as d, COUNT(*) as kc
                     FROM key_events
-                    WHERE date(timestamp) >= date('now', ?1 || ' days', 'localtime')
+                    WHERE date(timestamp) >= date('now', 'localtime', ?1 || ' days')
                     GROUP BY d
                 ),
                 click_daily AS (
                     SELECT date(timestamp) as d, COUNT(*) as cc
                     FROM mouse_events
                     WHERE event_type = 'click'
-                      AND date(timestamp) >= date('now', ?1 || ' days', 'localtime')
+                      AND date(timestamp) >= date('now', 'localtime', ?1 || ' days')
                     GROUP BY d
                 ),
                 dist_daily AS (
                     SELECT date(start_time) as d, COALESCE(SUM(total_distance), 0.0) as td
                     FROM sessions
-                    WHERE date(start_time) >= date('now', ?1 || ' days', 'localtime')
+                    WHERE date(start_time) >= date('now', 'localtime', ?1 || ' days')
                     GROUP BY d
                 ),
                 active_daily AS (
                     SELECT date(timestamp) as d, COUNT(DISTINCT strftime('%Y-%m-%d %H:%M', timestamp)) as am
                     FROM key_events
-                    WHERE date(timestamp) >= date('now', ?1 || ' days', 'localtime')
+                    WHERE date(timestamp) >= date('now', 'localtime', ?1 || ' days')
                     GROUP BY d
                 )
                 SELECT
@@ -514,7 +522,7 @@ impl Database {
                     COALESCE(dd.td, 0.0) as total_distance,
                     COALESCE(ad.am, 0) as active_minutes
                 FROM (
-                    SELECT DISTINCT date('now', (n - ?1) || ' days', 'localtime') as d
+                    SELECT DISTINCT date('now', 'localtime', (n - ?1) || ' days') as d
                     FROM (
                         WITH RECURSIVE cnt(x) AS (
                             SELECT 1 UNION ALL SELECT x+1 FROM cnt WHERE x < ?1
@@ -590,6 +598,29 @@ impl Database {
             .map_err(|e| format!("映射鼠标热力数据失败: {}", e))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("收集鼠标热力数据失败: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// 获取最近1小时的鼠标移动轨迹数据
+    pub fn get_mouse_trajectory(&self) -> Result<Vec<(i32, i32, String)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT x, y, timestamp FROM mouse_positions \
+                 WHERE timestamp >= datetime('now', 'localtime', '-1 hour') \
+                 ORDER BY timestamp ASC",
+            )
+            .map_err(|e| format!("查询鼠标轨迹数据失败: {}", e))?;
+
+        let data = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?, row.get::<_, String>(2)?))
+            })
+            .map_err(|e| format!("映射鼠标轨迹数据失败: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("收集鼠标轨迹数据失败: {}", e))?;
 
         Ok(data)
     }

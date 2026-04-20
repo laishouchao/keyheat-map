@@ -200,10 +200,13 @@ function EsportPoster({ data, nickname }: { data: PosterData; nickname: string }
         <div style={{
           textAlign: 'center',
           fontSize: 12,
-          color: 'rgba(255,255,255,0.15)',
+          color: 'rgba(255,255,255,0.3)',
           fontFamily: "'JetBrains Mono', monospace",
         }}>
-          KeyHeat Map | Generated with love
+          <div style={{ marginBottom: 4 }}>KeyHeat Map | Generated with love</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
+            github.com/laishouchao/keyheat-map
+          </div>
         </div>
       </div>
     </div>
@@ -279,10 +282,13 @@ function MinimalPoster({ data, nickname }: { data: PosterData; nickname: string 
         <div style={{
           textAlign: 'center',
           fontSize: 12,
-          color: '#ddd',
+          color: '#bbb',
           fontFamily: "'JetBrains Mono', monospace",
         }}>
-          KeyHeat Map
+          <div style={{ marginBottom: 4 }}>KeyHeat Map</div>
+          <div style={{ fontSize: 11, color: '#ccc' }}>
+            github.com/laishouchao/keyheat-map
+          </div>
         </div>
       </div>
     </div>
@@ -373,10 +379,13 @@ function GithubPoster({ data, nickname }: { data: PosterData; nickname: string }
         <div style={{
           textAlign: 'center',
           fontSize: 12,
-          color: '#30363d',
+          color: '#484f58',
           fontFamily: "'JetBrains Mono', monospace",
         }}>
-          KeyHeat Map
+          <div style={{ marginBottom: 4 }}>KeyHeat Map</div>
+          <div style={{ fontSize: 11, color: '#484f58' }}>
+            github.com/laishouchao/keyheat-map
+          </div>
         </div>
       </div>
     </div>
