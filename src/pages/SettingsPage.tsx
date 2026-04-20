@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ColorScheme } from '../utils/colorUtils';
 import { keyLayouts } from '../utils/keyLayout';
+import { APP_VERSION, BUILD_DATE } from '../config/version';
 
 // 后端返回的类型
 interface AppSettings {
@@ -480,11 +481,11 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>版本</span>
-            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>v0.5.2</span>
+            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>v{APP_VERSION}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>构建</span>
-            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>2026.04.20</span>
+            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{BUILD_DATE}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>GitHub</span>

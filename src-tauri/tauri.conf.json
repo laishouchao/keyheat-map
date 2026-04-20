@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "KeyHeatMap",
-    "version": "0.5.2"
+    "version": "0.5.3"
   },
   "tauri": {
     "allowlist": {
@@ -23,7 +23,9 @@
       },
       "fs": {
         "all": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     },
     "bundle": {

@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, BarChart3, Image, Settings, Flame } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { APP_VERSION } from '../config/version';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: '仪表盘' },
@@ -64,17 +65,8 @@ const styles = {
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [appVersion, setAppVersion] = useState('0.0.0');
   const [hasUpdate, setHasUpdate] = useState(false);
   const [latestVersion, setLatestVersion] = useState('');
-
-  // 从 package.json 读取当前版本号
-  useEffect(() => {
-    fetch('/version.json')
-      .then(r => r.json())
-      .then(data => setAppVersion(data.version || '0.0.0'))
-      .catch(() => setAppVersion('0.5.2'));
-  }, []);
 
   // 检查 GitHub 是否有新版本
   useEffect(() => {
@@ -90,7 +82,7 @@ export default function Sidebar() {
         setLatestVersion(latest);
 
         // 比较版本号
-        const currentParts = appVersion.split('.').map(Number);
+        const currentParts = APP_VERSION.split('.').map(Number);
         const latestParts = latest.split('.').map(Number);
         const isNewer = latestParts.some((v: number, i: number) => v > (currentParts[i] || 0));
         setHasUpdate(isNewer);
@@ -99,11 +91,10 @@ export default function Sidebar() {
       }
     };
 
-    // 启动时检查一次，之后每30分钟检查一次
     checkUpdate();
     const interval = setInterval(checkUpdate, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [appVersion]);
+  }, []);
 
   return (
     <div style={styles.sidebar}>
@@ -152,7 +143,7 @@ export default function Sidebar() {
             fontFamily: 'var(--font-mono)',
           }}
         >
-          v{appVersion}
+          v{APP_VERSION}
         </span>
         {hasUpdate && (
           <span

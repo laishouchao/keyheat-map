@@ -1,11 +1,11 @@
 {
   "name": "keyheat-map",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node -e \"const p=require('./package.json');require('fs').writeFileSync('public/version.json',JSON.stringify({version:p.version}))\" && tsc && vite build",
+    "build": "node scripts/sync-version.cjs && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
