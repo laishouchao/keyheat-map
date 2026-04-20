@@ -102,30 +102,60 @@ impl InputListener {
         let processor_thread = thread::Builder::new()
             .name("input-processor".to_string())
             .spawn(move || {
-                // 鼠标位置采样控制：每隔一定次数记录一次鼠标位置
+                // === 鼠标数据缓冲区 ===
                 let mut mouse_move_count: u64 = 0;
-                let mouse_position_sample_rate: u64 = 10; // 每10次鼠标移动记录一次位置
                 let mut last_mouse_position: Option<(i32, i32)> = None;
+                let mut last_click_position: Option<(i32, i32)> = None; // 记录最近鼠标位置，用于点击坐标
+                let mut pending_distance: f64 = 0.0; // 累积距离，定时批量写入
+                let mut pending_positions: Vec<(i32, i32, String)> = Vec::with_capacity(100); // 位置缓冲
+                let mut last_flush: std::time::Instant = std::time::Instant::now();
+                let flush_interval = std::time::Duration::from_secs(1); // 每秒刷新一次
 
                 loop {
                     if !processor_listening.load(Ordering::SeqCst) {
-                        // 处理剩余事件
+                        // 退出前刷新剩余数据
                         while let Ok(event) = rx.try_recv() {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position, &app_handle_clone) {
-                                eprintln!("处理事件失败: {}", e);
-                            }
+                            Self::process_event_no_db(
+                                &event,
+                                &db_clone,
+                                &session_id_arc,
+                                &mut mouse_move_count,
+                                &mut last_mouse_position,
+                                &mut last_click_position,
+                                &mut pending_distance,
+                                &mut pending_positions,
+                                &app_handle_clone,
+                            );
                         }
+                        // 最后一次刷新
+                        Self::flush_mouse_data(&db_clone, &session_id_arc, &mut pending_distance, &mut pending_positions);
                         break;
                     }
 
-                    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    match rx.recv_timeout(std::time::Duration::from_millis(50)) {
                         Ok(event) => {
-                            if let Err(e) = Self::process_event(&event, &db_clone, &session_id_arc, &mut mouse_move_count, mouse_position_sample_rate, &mut last_mouse_position, &app_handle_clone) {
-                                eprintln!("处理事件失败: {}", e);
+                            Self::process_event_no_db(
+                                &event,
+                                &db_clone,
+                                &session_id_arc,
+                                &mut last_mouse_position,
+                                &mut last_click_position,
+                                &mut pending_distance,
+                                &mut pending_positions,
+                                &app_handle_clone,
+                            );
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            // 定时刷新缓冲区到数据库
+                            if last_flush.elapsed() >= flush_interval {
+                                Self::flush_mouse_data(&db_clone, &session_id_arc, &mut pending_distance, &mut pending_positions);
+                                last_flush = std::time::Instant::now();
                             }
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            Self::flush_mouse_data(&db_clone, &session_id_arc, &mut pending_distance, &mut pending_positions);
+                            break;
+                        }
                     }
                 }
             })
@@ -261,43 +291,60 @@ impl InputListener {
         Ok(())
     }
 
-    /// 处理单个事件
-    fn process_event(
+    /// 处理单个事件（键盘直接写DB，鼠标走内存缓冲区）
+    fn process_event_no_db(
         event: &InputEvent,
         db: &Database,
         session_id: &Arc<std::sync::Mutex<String>>,
         mouse_move_count: &mut u64,
-        mouse_position_sample_rate: u64,
         last_mouse_position: &mut Option<(i32, i32)>,
+        last_click_position: &mut Option<(i32, i32)>,
+        pending_distance: &mut f64,
+        pending_positions: &mut Vec<(i32, i32, String)>,
         app_handle: &tauri::AppHandle,
-    ) -> Result<(), String> {
-        let sid = session_id.lock().map_err(|e| e.to_string())?;
-        let session_id_str = sid.clone();
-        drop(sid); // 尽快释放锁
-
+    ) {
         match event {
             InputEvent::KeyPress {
                 key_name,
                 key_code,
                 timestamp,
             } => {
-                db.insert_key_event(key_name, *key_code, timestamp, &session_id_str)?;
-                // 推送按键高亮事件（前端用于实时高亮显示）
+                // 键盘事件频率低，直接写数据库
+                let sid = match session_id.lock() {
+                    Ok(s) => s.clone(),
+                    Err(_) => return,
+                };
+                if let Err(e) = db.insert_key_event(key_name, *key_code, timestamp, &sid) {
+                    eprintln!("记录按键失败: {}", e);
+                }
                 let _ = app_handle.emit_all("key-highlight-on", key_name);
-                // 推送数据刷新事件
                 let _ = app_handle.emit_all("input-event", "key_press");
             }
             InputEvent::KeyRelease { key_name } => {
-                // 推送按键释放高亮事件
                 let _ = app_handle.emit_all("key-highlight-off", key_name);
             }
             InputEvent::ComboKeyPress { combo_name, timestamp } => {
-                db.insert_combo_event(combo_name, timestamp, &session_id_str)?;
+                let sid = match session_id.lock() {
+                    Ok(s) => s.clone(),
+                    Err(_) => return,
+                };
+                if let Err(e) = db.insert_combo_event(combo_name, timestamp, &sid) {
+                    eprintln!("记录组合键失败: {}", e);
+                }
                 let _ = app_handle.emit_all("input-event", "combo_key_press");
             }
             InputEvent::MouseClick { x, y, timestamp } => {
-                db.insert_mouse_event("click", *x, *y, timestamp, &session_id_str)?;
-                db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
+                // 使用最近记录的鼠标位置作为点击坐标（rdev ButtonPress 不带坐标）
+                let (cx, cy) = last_click_position.unwrap_or((*x, *y));
+                let sid = match session_id.lock() {
+                    Ok(s) => s.clone(),
+                    Err(_) => return,
+                };
+                if let Err(e) = db.insert_mouse_event("click", cx, cy, timestamp, &sid) {
+                    eprintln!("记录鼠标点击失败: {}", e);
+                }
+                // 将点击位置也加入轨迹
+                pending_positions.push((cx, cy, timestamp.clone()));
                 let _ = app_handle.emit_all("input-event", "mouse_click");
             }
             InputEvent::MouseMove {
@@ -309,42 +356,71 @@ impl InputListener {
                 *mouse_move_count += 1;
 
                 // 计算移动距离
-                let move_distance = if let Some((last_x, last_y)) = *last_mouse_position {
-                    let dx = (*x - last_x) as f64;
-                    let dy = (*y - last_y) as f64;
-                    (dx * dx + dy * dy).sqrt()
-                } else {
-                    0.0
-                };
+                if let Some((lx, ly)) = *last_mouse_position {
+                    let dx = (*x - lx) as f64;
+                    let dy = (*y - ly) as f64;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    *pending_distance += dist;
+                }
 
-                // 更新上一次位置
+                // 更新位置
                 *last_mouse_position = Some((*x, *y));
+                *last_click_position = Some((*x, *y));
 
-                // 累积到会话总距离（忽略错误，不影响位置记录）
-                if move_distance > 0.0 {
-                    let _ = db.update_session_distance(&session_id_str, move_distance);
+                // 每5次记录一个位置点（减少数据量但保留轨迹形状）
+                if *mouse_move_count % 5 == 0 {
+                    pending_positions.push((*x, *y, timestamp.clone()));
                 }
 
-                // 按采样率记录鼠标位置，避免数据库膨胀
-                if *mouse_move_count % mouse_position_sample_rate == 0 {
-                    if let Err(e) = db.insert_mouse_position(*x, *y, timestamp, &session_id_str) {
-                        eprintln!("记录鼠标位置失败: {}", e);
-                    }
-                }
-
-                // MouseMove 事件太频繁，每 10 次才推送一次
+                // 每10次推送一次前端事件
                 if *mouse_move_count % 10 == 0 {
                     let _ = app_handle.emit_all("input-event", "mouse_move");
                 }
             }
             InputEvent::MouseScroll { x, y, timestamp } => {
-                db.insert_mouse_event("scroll", *x, *y, timestamp, &session_id_str)?;
-                db.insert_mouse_position(*x, *y, timestamp, &session_id_str)?;
+                let sid = match session_id.lock() {
+                    Ok(s) => s.clone(),
+                    Err(_) => return,
+                };
+                if let Err(e) = db.insert_mouse_event("scroll", *x, *y, timestamp, &sid) {
+                    eprintln!("记录滚轮失败: {}", e);
+                }
                 let _ = app_handle.emit_all("input-event", "mouse_scroll");
             }
         }
+    }
 
-        Ok(())
+    /// 将缓冲的鼠标数据批量写入数据库（每秒调用一次）
+    fn flush_mouse_data(
+        db: &Database,
+        session_id: &Arc<std::sync::Mutex<String>>,
+        pending_distance: &mut f64,
+        pending_positions: &mut Vec<(i32, i32, String)>,
+    ) {
+        if *pending_distance < 0.01 && pending_positions.is_empty() {
+            return;
+        }
+
+        let sid = match session_id.lock() {
+            Ok(s) => s.clone(),
+            Err(_) => return,
+        };
+
+        // 批量写入距离
+        if *pending_distance >= 0.01 {
+            if let Err(e) = db.update_session_distance(&sid, *pending_distance) {
+                eprintln!("批量写入距离失败: {}", e);
+            }
+            *pending_distance = 0.0;
+        }
+
+        // 批量写入位置
+        if !pending_positions.is_empty() {
+            if let Err(e) = db.batch_insert_mouse_positions(&pending_positions, &sid) {
+                eprintln!("批量写入位置失败: {}", e);
+            }
+            pending_positions.clear();
+        }
     }
 
     /// 停止输入监听

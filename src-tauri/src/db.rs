@@ -302,6 +302,30 @@ impl Database {
         Ok(())
     }
 
+    /// 批量插入鼠标位置（事务内一次性写入，减少锁竞争）
+    pub fn batch_insert_mouse_positions(
+        &self,
+        positions: &[(i32, i32, String)],
+        session_id: &str,
+    ) -> Result<(), String> {
+        if positions.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let tx = conn.unchecked_transaction().map_err(|e| format!("开始事务失败: {}", e))?;
+        {
+            let mut stmt = tx
+                .prepare("INSERT INTO mouse_positions (x, y, timestamp, session_id) VALUES (?1, ?2, ?3, ?4)")
+                .map_err(|e| format!("准备语句失败: {}", e))?;
+            for (x, y, ts) in positions {
+                stmt.execute(params![x, y, ts, session_id])
+                    .map_err(|e| format!("批量插入位置失败: {}", e))?;
+            }
+        }
+        tx.commit().map_err(|e| format!("提交事务失败: {}", e))?;
+        Ok(())
+    }
+
     /// 更新会话的鼠标移动距离
     pub fn update_session_distance(&self, session_id: &str, distance: f64) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
