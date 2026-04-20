@@ -138,6 +138,7 @@ impl InputListener {
                                 &event,
                                 &db_clone,
                                 &session_id_arc,
+                                &mut mouse_move_count,
                                 &mut last_mouse_position,
                                 &mut last_click_position,
                                 &mut pending_distance,
@@ -166,6 +167,8 @@ impl InputListener {
         // 启动 rdev 监听线程（rdev::listen 是阻塞的）
         let listener_is_listening = Arc::clone(&self.is_listening);
         let modifiers_arc = Arc::clone(&self.pressed_modifiers);
+        let last_pos_in_callback = Arc::new(std::sync::Mutex::new((0i32, 0i32)));
+        let last_pos_clone = Arc::clone(&last_pos_in_callback);
         let listener_thread = thread::Builder::new()
             .name("input-listener".to_string())
             .spawn(move || {
@@ -248,13 +251,12 @@ impl InputListener {
                             });
                         }
                         rdev::EventType::ButtonPress(button) => {
-                            // rdev 0.5 中 Event 没有 position 字段
-                            // 鼠标点击时无法直接获取坐标，使用 (0, 0) 作为占位
+                            let (cx, cy) = last_pos_clone.lock().map(|p| *p).unwrap_or((0, 0));
                             match button {
                                 rdev::Button::Left | rdev::Button::Right | rdev::Button::Middle => {
                                     let _ = tx.send(InputEvent::MouseClick {
-                                        x: 0,
-                                        y: 0,
+                                        x: cx,
+                                        y: cy,
                                         timestamp: chrono::Local::now().to_rfc3339(),
                                     });
                                 }
@@ -265,6 +267,10 @@ impl InputListener {
                             // 忽略鼠标释放事件
                         }
                         rdev::EventType::MouseMove { x, y } => {
+                            // 更新共享的最近位置（供 ButtonPress/Wheel 使用）
+                            if let Ok(mut pos) = last_pos_clone.lock() {
+                                *pos = (x as i32, y as i32);
+                            }
                             let _ = tx.send(InputEvent::MouseMove {
                                 x: x as i32,
                                 y: y as i32,
@@ -273,11 +279,10 @@ impl InputListener {
                             });
                         }
                         rdev::EventType::Wheel { delta_x: _, delta_y: _ } => {
-                            // rdev 0.5 中 Event 没有 position 字段
-                            // 滚轮事件无法直接获取坐标，使用 (0, 0) 作为占位
+                            let (cx, cy) = last_pos_clone.lock().map(|p| *p).unwrap_or((0, 0));
                             let _ = tx.send(InputEvent::MouseScroll {
-                                x: 0,
-                                y: 0,
+                                x: cx,
+                                y: cy,
                                 timestamp: chrono::Local::now().to_rfc3339(),
                             });
                         }

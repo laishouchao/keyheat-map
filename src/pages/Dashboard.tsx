@@ -14,8 +14,8 @@ import { formatNumber, formatDistance, formatDuration, formatPercent } from '../
 interface OverallStats {
   total_keys: number;
   total_clicks: number;
-  total_mouse_distance: number;
-  active_seconds: number;
+  total_distance: number;
+  active_minutes: number;
   total_sessions: number;
 }
 
@@ -546,8 +546,8 @@ export default function Dashboard() {
 
   const totalKeys = stats?.total_keys || 0;
   const mouseClicks = stats?.total_clicks || 0;
-  const mouseDistance = stats?.total_mouse_distance || 0;
-  const activeSeconds = stats?.active_seconds || 0;
+  const mouseDistance = stats?.total_distance || 0;
+  const activeSeconds = (stats?.active_minutes || 0) * 60;
   const hasData = totalKeys > 0 || mouseClicks > 0;
 
   if (!hasData) {

@@ -78,14 +78,14 @@ export default function StatsPage() {
         invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 0 }),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
-        invokeTauri<{x: number; y: number; timestamp: string}[]>('get_mouse_trajectory'),
+        invokeTauri<[number, number, string][]>('get_mouse_trajectory'),
         invokeTauri<{combo_name: string; count: number}[]>('get_combo_stats', { period: periodMap[period] }),
       ]);
 
       if (ds) setDailyStats(ds);
       if (hd) setHeatmapData(hd);
       if (hr) setHourlyData(hr);
-      if (mh) setMouseTrajectory(mh);
+      if (mh) setMouseTrajectory(mh.map(([x, y, timestamp]) => ({ x, y, timestamp })));
       if (cs) setComboStats(cs);
     } catch (e) {
       console.error('获取统计数据失败:', e);

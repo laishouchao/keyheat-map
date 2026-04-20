@@ -16,6 +16,9 @@ interface AppSettings {
   language: string;
   color_scheme: string;
   keyboard_layout: string;
+  show_tray_icon: boolean;
+  ignore_mouse_move: boolean;
+  mouse_move_threshold: number;
 }
 
 // 安全调用 Tauri invoke
@@ -210,20 +213,14 @@ export default function SettingsPage() {
   const handleExport = useCallback(async (format: 'json' | 'csv') => {
     setExporting(true);
     try {
-      const data = await invokeTauri<string>('export_data', { format });
-      if (data) {
-        const blob = new Blob([data], {
-          type: format === 'json' ? 'application/json' : 'text/csv',
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `keyheat-data.${format}`;
-        link.href = url;
-        link.click();
-        URL.revokeObjectURL(url);
+      // 后端已经弹出文件保存对话框并写入文件，返回的是成功消息
+      const msg = await invokeTauri<string>('export_data', { format });
+      if (msg) {
+        setToast({ message: msg, type: 'success' });
       }
     } catch (e) {
       console.error('导出数据失败:', e);
+      setToast({ message: '导出失败', type: 'error' });
     } finally {
       setExporting(false);
     }

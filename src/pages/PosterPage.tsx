@@ -17,16 +17,16 @@ interface KeyCount {
 interface OverallStats {
   total_keys: number;
   total_clicks: number;
-  total_mouse_distance: number;
-  active_seconds: number;
+  total_distance: number;
+  active_minutes: number;
   total_sessions: number;
 }
 
 interface DailyStats {
   date: string;
-  key_count: number;
-  click_count: number;
-  mouse_distance: number;
+  total_keys: number;
+  total_clicks: number;
+  total_distance: number;
 }
 
 // 海报数据类型
@@ -435,7 +435,7 @@ export default function PosterPage() {
       // 计算活跃天数
       let activeDays = 0;
       if (dailyStats) {
-        activeDays = dailyStats.filter(d => d.key_count > 0 || d.click_count > 0).length;
+        activeDays = dailyStats.filter(d => d.total_keys > 0 || d.total_clicks > 0).length;
       }
 
       // 生成贡献图数据（基于每日数据）
@@ -454,7 +454,7 @@ export default function PosterPage() {
             const weekIndex = Math.min(51, Math.floor(diffDays / 7));
             const dayIndex = date.getDay();
             if (weekIndex >= 0 && weekIndex < 52) {
-              contributions[weekIndex][dayIndex] = d.key_count;
+              contributions[weekIndex][dayIndex] = d.total_keys;
             }
           }
         });
