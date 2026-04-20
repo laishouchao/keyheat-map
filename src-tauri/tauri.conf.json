@@ -6,8 +6,8 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "键盘侠",
-    "version": "0.5.1"
+    "productName": "KeyHeatMap",
+    "version": "0.5.2"
   },
   "tauri": {
     "allowlist": {
