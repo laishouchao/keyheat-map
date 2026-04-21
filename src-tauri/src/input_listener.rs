@@ -84,7 +84,7 @@ impl InputListener {
             *sid = session_id.clone();
         }
 
-        db.create_session(&session_id, &chrono::Local::now().to_rfc3339())?;
+        db.create_session(&session_id, &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string())?;
 
         // 创建事件通道
         let (tx, rx): (Sender<InputEvent>, Receiver<InputEvent>) = mpsc::channel();
@@ -186,7 +186,7 @@ impl InputListener {
                         rdev::EventType::KeyPress(key) => {
                             let key_name = normalize_key_name(&key);
                             let key_code = key_to_code(&key);
-                            let timestamp = chrono::Local::now().to_rfc3339();
+                            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
                             // 检查是否是修饰键
                             if is_modifier_key(&key) {
@@ -257,7 +257,7 @@ impl InputListener {
                                     let _ = tx.send(InputEvent::MouseClick {
                                         x: cx,
                                         y: cy,
-                                        timestamp: chrono::Local::now().to_rfc3339(),
+                                        timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                                     });
                                 }
                                 _ => {}
@@ -275,7 +275,7 @@ impl InputListener {
                                 x: x as i32,
                                 y: y as i32,
                                 distance: 0.0, // 距离在处理线程中计算
-                                timestamp: chrono::Local::now().to_rfc3339(),
+                                timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                             });
                         }
                         rdev::EventType::Wheel { delta_x: _, delta_y: _ } => {
@@ -283,7 +283,7 @@ impl InputListener {
                             let _ = tx.send(InputEvent::MouseScroll {
                                 x: cx,
                                 y: cy,
-                                timestamp: chrono::Local::now().to_rfc3339(),
+                                timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                             });
                         }
                     };
@@ -442,7 +442,7 @@ impl InputListener {
         drop(sid);
 
         if !session_id_str.is_empty() {
-            db.end_session(&session_id_str, &chrono::Local::now().to_rfc3339())?;
+            db.end_session(&session_id_str, &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string())?;
         }
 
         // 等待处理线程结束
