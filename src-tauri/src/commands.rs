@@ -24,6 +24,12 @@ pub fn get_stats(state: tauri::State<AppState>) -> Result<OverallStats, String> 
     state.db.get_stats()
 }
 
+/// 获取今日统计（从0时开始）
+#[tauri::command]
+pub fn get_today_stats(state: tauri::State<AppState>) -> Result<OverallStats, String> {
+    state.db.get_today_stats()
+}
+
 /// 获取每日统计趋势
 #[tauri::command]
 pub fn get_daily_stats(

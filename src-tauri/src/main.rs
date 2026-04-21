@@ -24,6 +24,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_heatmap_data,
             commands::get_stats,
+            commands::get_today_stats,
             commands::get_daily_stats,
             commands::get_top_keys,
             commands::get_mouse_heatmap_data,

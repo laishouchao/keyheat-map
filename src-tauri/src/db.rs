@@ -509,6 +509,71 @@ impl Database {
         })
     }
 
+    /// 获取今日统计（从0时开始）
+    pub fn get_today_stats(&self) -> Result<OverallStats, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let today_filter = "date(timestamp) = date('now', 'localtime')";
+
+        let total_keys: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM key_events WHERE {}", today_filter),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let total_clicks: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM mouse_events WHERE event_type = 'click' AND {}", today_filter),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let total_distance: f64 = conn
+            .query_row(
+                &format!("SELECT COALESCE(SUM(total_distance), 0.0) FROM sessions WHERE date(start_time) = date('now', 'localtime')"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+
+        let total_sessions: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM sessions WHERE date(start_time) = date('now', 'localtime')"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let active_minutes: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(DISTINCT strftime('%Y-%m-%d %H:%M', timestamp)) FROM key_events WHERE {}", today_filter),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let most_active_hour: i32 = conn
+            .query_row(
+                &format!("SELECT CAST(strftime('%H', timestamp) AS INTEGER) as hour, COUNT(*) as cnt \
+                 FROM key_events WHERE {} \
+                 GROUP BY hour ORDER BY cnt DESC LIMIT 1", today_filter),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        Ok(OverallStats {
+            total_keys,
+            total_clicks,
+            total_distance,
+            total_sessions,
+            active_minutes,
+            most_active_hour,
+        })
+    }
+
     /// 获取每日统计趋势
     pub fn get_daily_stats(&self, days: i32) -> Result<Vec<DailyStats>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;

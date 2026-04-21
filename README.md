@@ -118,6 +118,75 @@ npm run tauri build
 
 ---
 
+## 🔐 权限配置说明
+
+本应用需要监听全局键盘和鼠标事件，各平台首次运行时可能需要授予权限。
+
+### macOS
+
+macOS 要求应用具有 **辅助功能（Accessibility）** 权限才能监听全局输入事件。
+
+1. 首次启动应用时，系统会弹出权限请求对话框，点击 **"打开系统设置"**
+2. 在 **隐私与安全性 → 辅助功能** 中，将 **KeyHeatMap** 添加到允许列表
+3. 如果错过了弹窗，可以手动操作：
+   - 打开 **系统设置 → 隐私与安全性 → 辅助功能**
+   - 点击左下角 **+** 号，添加 KeyHeatMap（位于 Applications 文件夹）
+   - 确保开关处于 **开启** 状态
+
+> ⚠️ 未授予此权限时，应用无法记录任何按键和鼠标数据。
+
+### Linux
+
+Linux 上监听全局输入事件需要 **X11** 环境（不支持 Wayland 下的全局输入监听）。
+
+#### 使用 X11 会话
+
+如果当前使用的是 Wayland 会话，需要切换到 X11：
+
+```bash
+# 方法1：登录时选择 X11 会话
+# 在登录界面点击齿轮图标，选择 "Ubuntu on Xorg" 或 "GNOME on Xorg"
+
+# 方法2：临时切换（从终端启动）
+export GDK_BACKEND=x11
+./keyheat-map
+```
+
+#### 输入设备权限
+
+部分 Linux 发行版可能需要授予设备访问权限：
+
+```bash
+# Ubuntu/Debian - 将用户添加到 input 组
+sudo usermod -aG input $USER
+# 注销后重新登录生效
+
+# Fedora
+sudo usermod -aG input $USER
+```
+
+#### 无障碍权限（GNOME）
+
+```bash
+# 安装 GNOME 无障碍工具
+sudo apt install gnome-tweaks
+
+# 或通过命令行启用
+gsettings set org.gnome.desktop.interface toolkit-accessibility true
+```
+
+#### 防火墙配置
+
+本应用不使用网络功能（所有数据仅存储在本地），无需配置防火墙规则。
+
+### Windows
+
+Windows 无需额外权限配置，直接安装即可使用。
+
+> ⚠️ 部分杀毒软件可能误报全局键盘钩子，请将 KeyHeatMap 添加到白名单。
+
+---
+
 ## 🖥️ 跨平台支持
 
 | 平台 | 状态 | 格式 |

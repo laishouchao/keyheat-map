@@ -477,7 +477,7 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       const [s, h, hr, settings] = await Promise.all([
-        invokeTauri<OverallStats>('get_stats'),
+        invokeTauri<OverallStats>('get_today_stats'),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: 'today' }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
         invokeTauri<AppSettings>('get_app_settings'),
