@@ -604,7 +604,7 @@ export default function Dashboard() {
         />
         <StatCard
           icon={Move}
-          label="鼠标移动距离"
+          label="累计鼠标移动"
           value={mouseDistance}
           format={formatDistance}
           color="#7b2ff7"

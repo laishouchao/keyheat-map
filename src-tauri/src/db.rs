@@ -532,7 +532,7 @@ impl Database {
 
         let total_distance: f64 = conn
             .query_row(
-                &format!("SELECT COALESCE(SUM(total_distance), 0.0) FROM sessions WHERE date(start_time) = date('now', 'localtime')"),
+                "SELECT COALESCE(SUM(total_distance), 0.0) FROM sessions",
                 [],
                 |row| row.get(0),
             )
