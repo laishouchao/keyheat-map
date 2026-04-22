@@ -615,7 +615,7 @@ impl Database {
                     GROUP BY d
                 ),
                 dist_daily AS (
-                    SELECT date, distance as td
+                    SELECT date as d, distance as td
                     FROM daily_distances
                     WHERE date >= date('now', 'localtime', '-' || ?1 || ' days')
                 ),
