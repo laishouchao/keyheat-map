@@ -29,6 +29,13 @@ interface HourlyDistribution {
   click_count: number;
 }
 
+interface WeeklyHourlyDistribution {
+  day: string;
+  hour: number;
+  key_count: number;
+  click_count: number;
+}
+
 // 安全调用 Tauri invoke
 async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (typeof window !== 'undefined' && '__TAURI__' in window) {
@@ -61,6 +68,7 @@ export default function StatsPage() {
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
   const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
+  const [weeklyHourlyData, setWeeklyHourlyData] = useState<WeeklyHourlyDistribution[]>([]);
   const [mouseTrajectory, setMouseTrajectory] = useState<{x: number; y: number; timestamp: string}[]>([]);
   const [comboStats, setComboStats] = useState<{combo_name: string; count: number}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,12 +83,13 @@ export default function StatsPage() {
         all: 'all',
       };
 
-      const [ds, hd, hr, mh, cs] = await Promise.all([
+      const [ds, hd, hr, mh, cs, whr] = await Promise.all([
         invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 0 }),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
         invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
         invokeTauri<[number, number, string][]>('get_mouse_trajectory'),
         invokeTauri<{combo_name: string; count: number}[]>('get_combo_stats', { period: periodMap[period] }),
+        invokeTauri<WeeklyHourlyDistribution[]>('get_weekly_hourly_distribution'),
       ]);
 
       if (ds) setDailyStats(ds);
@@ -88,6 +97,7 @@ export default function StatsPage() {
       if (hr) setHourlyData(hr);
       if (mh) setMouseTrajectory(mh.map(([x, y, timestamp]) => ({ x, y, timestamp })));
       if (cs) setComboStats(cs);
+      if (whr) setWeeklyHourlyData(whr);
     } catch (e) {
       console.error('获取统计数据失败:', e);
     } finally {
@@ -117,23 +127,30 @@ export default function StatsPage() {
     }));
   }, [dailyStats]);
 
-  // 24小时热力分布（7天 x 24小时）
+  // 24小时热力分布（7天 x 24小时，真实数据）
   const hourlyHeatmap = useMemo(() => {
-    const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
-    // 根据当前是周几来排列
-    const today = new Date().getDay();
-    const orderedDays = [...weekDays.slice(today), ...weekDays.slice(0, today)];
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    // 获取本周7天的日期列表（从6天前到今天）
+    const now = new Date();
+    const dayDates: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      dayDates.push(d.toISOString().slice(0, 10)); // YYYY-MM-DD
+    }
 
-    return orderedDays.map((day, di) => ({
-      day,
-      hours: Array.from({ length: 24 }, (_, hi) => {
-        const entry = hourlyData.find(h => h.hour === hi);
-        // 模拟按天分配：当天数据完整，其他天递减
-        const dayFactor = di === 0 ? 1 : Math.max(0.3, 1 - di * 0.1);
-        return Math.floor(((entry?.key_count || 0) + (entry?.click_count || 0)) * dayFactor);
-      }),
-    }));
-  }, [hourlyData]);
+    return dayDates.map(dateStr => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const dayOfWeek = weekDays[d.getDay()];
+      const hours = Array.from({ length: 24 }, (_, hi) => {
+        const entry = weeklyHourlyData.find(
+          w => w.day === dateStr && w.hour === hi
+        );
+        return (entry?.key_count || 0) + (entry?.click_count || 0);
+      });
+      return { day: `${dateStr.slice(5)} 周${dayOfWeek}`, hours };
+    });
+  }, [weeklyHourlyData]);
 
   const timeRangeLabels: Record<TimeRange, string> = {
     today: '今日',

@@ -1,6 +1,6 @@
 [package]
 name = "keyheat-map"
-version = "0.7.8"
+version = "0.7.9"
 description = "A keyboard heatmap application"
 authors = ["you"]
 license = ""

@@ -72,6 +72,15 @@ pub struct HourlyDistribution {
     pub click_count: i64,
 }
 
+/// 本周每小时分布（按天+小时）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeeklyHourlyDistribution {
+    pub day: String,   // 日期 YYYY-MM-DD
+    pub hour: i32,
+    pub key_count: i64,
+    pub click_count: i64,
+}
+
 /// 总体统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverallStats {
@@ -781,6 +790,64 @@ impl Database {
             .map_err(|e| format!("映射小时分布失败: {}", e))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("收集小时分布失败: {}", e))?;
+
+        Ok(data)
+    }
+
+    /// 获取本周每天每小时的按键/点击分布（真实数据）
+    pub fn get_weekly_hourly_distribution(&self) -> Result<Vec<WeeklyHourlyDistribution>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let mut stmt = conn
+            .prepare(
+                "WITH RECURSIVE week_days(d) AS (
+                    SELECT date('now', 'localtime') UNION ALL
+                    SELECT date(d, '-1 day') FROM week_days WHERE d > date('now', 'localtime', '-6 days')
+                ),
+                all_hours(h) AS (
+                    SELECT 0 UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+                    UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
+                    UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11
+                    UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
+                    UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19
+                    UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
+                ),
+                key_hourly AS (
+                    SELECT date(timestamp) as d, CAST(strftime('%H', timestamp) AS INTEGER) as h, COUNT(*) as cnt
+                    FROM key_events
+                    WHERE date(timestamp) >= date('now', 'localtime', '-6 days')
+                    GROUP BY d, h
+                ),
+                click_hourly AS (
+                    SELECT date(timestamp) as d, CAST(strftime('%H', timestamp) AS INTEGER) as h, COUNT(*) as cnt
+                    FROM mouse_events
+                    WHERE event_type = 'click'
+                      AND date(timestamp) >= date('now', 'localtime', '-6 days')
+                    GROUP BY d, h
+                )
+                SELECT wd.d as day, ah.h as hour,
+                       COALESCE(kh.cnt, 0) as key_count,
+                       COALESCE(ch.cnt, 0) as click_count
+                FROM week_days wd
+                CROSS JOIN all_hours ah
+                LEFT JOIN key_hourly kh ON wd.d = kh.d AND ah.h = kh.h
+                LEFT JOIN click_hourly ch ON wd.d = ch.d AND ah.h = ch.h
+                ORDER BY wd.d ASC, ah.h ASC",
+            )
+            .map_err(|e| format!("查询本周小时分布失败: {}", e))?;
+
+        let data = stmt
+            .query_map([], |row| {
+                Ok(WeeklyHourlyDistribution {
+                    day: row.get(0)?,
+                    hour: row.get(1)?,
+                    key_count: row.get(2)?,
+                    click_count: row.get(3)?,
+                })
+            })
+            .map_err(|e| format!("映射本周小时分布失败: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("收集本周小时分布失败: {}", e))?;
 
         Ok(data)
     }

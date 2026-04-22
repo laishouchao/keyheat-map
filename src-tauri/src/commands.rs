@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use crate::db::{AppSettings, ComboKeyCount, Database, DailyStats, HourlyDistribution, KeyCount, OverallStats, Session};
+use crate::db::{AppSettings, ComboKeyCount, Database, DailyStats, HourlyDistribution, KeyCount, OverallStats, Session, WeeklyHourlyDistribution};
 use crate::input_listener::InputListener;
 
 /// 应用共享状态
@@ -69,6 +69,12 @@ pub fn get_hourly_distribution(
     state: tauri::State<AppState>,
 ) -> Result<Vec<HourlyDistribution>, String> {
     state.db.get_hourly_distribution()
+}
+
+/// 获取本周每天每小时分布（真实数据）
+#[tauri::command]
+pub fn get_weekly_hourly_distribution(state: tauri::State<AppState>) -> Result<Vec<WeeklyHourlyDistribution>, String> {
+    state.db.get_weekly_hourly_distribution()
 }
 
 /// 获取历史会话列表
