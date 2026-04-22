@@ -23,12 +23,6 @@ interface DailyStats {
   active_minutes: number;
 }
 
-interface HourlyDistribution {
-  hour: number;
-  key_count: number;
-  click_count: number;
-}
-
 interface WeeklyHourlyDistribution {
   day: string;
   hour: number;
@@ -67,7 +61,6 @@ export default function StatsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [heatmapData, setHeatmapData] = useState<KeyCount[]>([]);
-  const [hourlyData, setHourlyData] = useState<HourlyDistribution[]>([]);
   const [weeklyHourlyData, setWeeklyHourlyData] = useState<WeeklyHourlyDistribution[]>([]);
   const [mouseTrajectory, setMouseTrajectory] = useState<{x: number; y: number; timestamp: string}[]>([]);
   const [comboStats, setComboStats] = useState<{combo_name: string; count: number}[]>([]);
@@ -83,10 +76,9 @@ export default function StatsPage() {
         all: 'all',
       };
 
-      const [ds, hd, hr, mh, cs, whr] = await Promise.all([
+      const [ds, hd, mh, cs, whr] = await Promise.all([
         invokeTauri<DailyStats[]>('get_daily_stats', { days: period === 'all' ? 365 : period === 'month' ? 30 : period === 'week' ? 7 : 0 }),
         invokeTauri<KeyCount[]>('get_heatmap_data', { period: periodMap[period] }),
-        invokeTauri<HourlyDistribution[]>('get_hourly_distribution'),
         invokeTauri<[number, number, string][]>('get_mouse_trajectory'),
         invokeTauri<{combo_name: string; count: number}[]>('get_combo_stats', { period: periodMap[period] }),
         invokeTauri<WeeklyHourlyDistribution[]>('get_weekly_hourly_distribution'),
@@ -94,7 +86,6 @@ export default function StatsPage() {
 
       if (ds) setDailyStats(ds);
       if (hd) setHeatmapData(hd);
-      if (hr) setHourlyData(hr);
       if (mh) setMouseTrajectory(mh.map(([x, y, timestamp]) => ({ x, y, timestamp })));
       if (cs) setComboStats(cs);
       if (whr) setWeeklyHourlyData(whr);
