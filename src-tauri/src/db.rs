@@ -206,6 +206,11 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_combo_key_events_timestamp ON combo_key_events(timestamp);
             CREATE INDEX IF NOT EXISTS idx_combo_key_events_combo ON combo_key_events(combo_name);
+
+            CREATE TABLE IF NOT EXISTS daily_distances (
+                date TEXT PRIMARY KEY,
+                distance REAL NOT NULL DEFAULT 0.0
+            );
             ",
         )
         .map_err(|e| format!("创建表失败: {}", e))?;
@@ -336,6 +341,22 @@ impl Database {
         )
         .map_err(|e| format!("更新会话移动距离失败: {}", e))?;
 
+        Ok(())
+    }
+
+    /// 按天累加鼠标移动距离
+    pub fn update_daily_distance(&self, distance: f64) -> Result<(), String> {
+        if distance < 0.01 {
+            return Ok(());
+        }
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        conn.execute(
+            "INSERT INTO daily_distances (date, distance) VALUES (?1, ?2)
+             ON CONFLICT(date) DO UPDATE SET distance = distance + ?2",
+            params![today, distance],
+        )
+        .map_err(|e| format!("更新每日距离失败: {}", e))?;
         Ok(())
     }
 
@@ -532,7 +553,7 @@ impl Database {
 
         let total_distance: f64 = conn
             .query_row(
-                "SELECT COALESCE(SUM(total_distance), 0.0) FROM sessions",
+                "SELECT COALESCE(distance, 0.0) FROM daily_distances WHERE date = date('now', 'localtime')",
                 [],
                 |row| row.get(0),
             )
@@ -594,10 +615,9 @@ impl Database {
                     GROUP BY d
                 ),
                 dist_daily AS (
-                    SELECT date(start_time) as d, COALESCE(SUM(total_distance), 0.0) as td
-                    FROM sessions
-                    WHERE date(start_time) >= date('now', 'localtime', '-' || ?1 || ' days')
-                    GROUP BY d
+                    SELECT date, distance as td
+                    FROM daily_distances
+                    WHERE date >= date('now', 'localtime', '-' || ?1 || ' days')
                 ),
                 active_daily AS (
                     SELECT date(timestamp) as d, COUNT(DISTINCT strftime('%Y-%m-%d %H:%M', timestamp)) as am

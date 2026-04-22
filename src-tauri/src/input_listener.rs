@@ -416,6 +416,10 @@ impl InputListener {
             if let Err(e) = db.update_session_distance(&sid, *pending_distance) {
                 eprintln!("批量写入距离失败: {}", e);
             }
+            // 按天累加距离
+            if let Err(e) = db.update_daily_distance(*pending_distance) {
+                eprintln!("按天写入距离失败: {}", e);
+            }
             *pending_distance = 0.0;
         }
 
