@@ -20,13 +20,9 @@
 
 ## 📸 应用截图
 
-<img width="1919" height="1230" alt="image" src="https://github.com/user-attachments/assets/aad7e3fd-1b5e-4afc-b024-c7422ec7c574" />
-<img width="1919" height="1230" alt="image" src="https://github.com/user-attachments/assets/1a74f4c9-affa-4761-89f2-e7aeb4be44ef" />
-<img width="1919" height="1230" alt="image" src="https://github.com/user-attachments/assets/68ef3de1-246a-4467-886e-a498193fb991" />
-<img width="1919" height="1230" alt="image" src="https://github.com/user-attachments/assets/860cb6c1-1399-4baa-b9f2-6cae7186f7ab" />
-<img width="1919" height="1481" alt="image" src="https://github.com/user-attachments/assets/acf8f7e8-4450-4ae6-a0f2-2dfa681c96c1" />
-<img width="1919" height="1481" alt="image" src="https://github.com/user-attachments/assets/0e7f3a70-fc6a-4cc7-9c41-0c82be7f7bad" />
-
+| <img src="https://github.com/user-attachments/assets/aad7e3fd-1b5e-4afc-b024-c7422ec7c574" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> | <img src="https://github.com/user-attachments/assets/1a74f4c9-affa-4761-89f2-e7aeb4be44ef" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> | <img src="https://github.com/user-attachments/assets/68ef3de1-246a-4467-886e-a498193fb991" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> |
+|:-:|:-:|:-:|
+| <img src="https://github.com/user-attachments/assets/860cb6c1-1399-4baa-b9f2-6cae7186f7ab" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> | <img src="https://github.com/user-attachments/assets/acf8f7e8-4450-4ae6-a0f2-2dfa681c96c1" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> | <img src="https://github.com/user-attachments/assets/0e7f3a70-fc6a-4cc7-9c41-0c82be7f7bad" style="width:100%;height:180px;border-radius:12px;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.12);" /> |
 
 > 启动应用后，在后台静默记录键盘和鼠标数据，打开窗口即可查看精美的热力图和数据分析。所有数据仅存储在本地，不会上传到任何服务器。
 
